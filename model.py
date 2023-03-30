@@ -1,7 +1,7 @@
 # File Name: model.py
 # Author: Christopher Parker
 # Created: Fri Mar 24, 2023 | 10:10P EDT
-# Last Modified: Thu Mar 30, 2023 | 03:59P EDT
+# Last Modified: Thu Mar 30, 2023 | 04:16P EDT
 
 "First pass at an NODE model with PyTorch"
 
@@ -29,9 +29,6 @@ from torchdiffeq import odeint_adjoint as odeint
 class ANN(nn.Module):
     def __init__(self, file=None):
         super().__init__()
-
-        # For debugging purposes
-        # self.file = file
 
         # Set up neural networks for each element of a 3 equation HPA axis
         #  model
@@ -79,6 +76,7 @@ class NelsonData(Dataset):
 
         ACTHdata = np.genfromtxt(ACTHdata_path)
         CORTdata = np.genfromtxt(CORTdata_path)
+        print(ACTHdata,CORTdata)
 
         data = torch.from_numpy(
             np.concatenate((ACTHdata, CORTdata), 1)[:,[0,2]]
@@ -86,44 +84,18 @@ class NelsonData(Dataset):
         label = torch.from_numpy(
             np.concatenate((ACTHdata, CORTdata), 1)[:,[1,3]]
         )
+        print(f'label: {label}')
         return data, label
 
 if __name__ == '__main__':
-    # Import data for matching
-    # nelson_ACTH = np.zeros((11,10))
-    # nelson_CORT = np.zeros((11,10))
-    # for i in range(1, 11):
-    #     nelson_ACTH[:,i-1] = np.genfromtxt(f'Nelson TSST Individual Patient Data/ControlPatient{i}_ACTH.txt')
-    #     nelson_CORT[:,i-1] = np.genfromtxt(f'Nelson TSST Individual Patient Data/ControlPatient{i}_ACTH.txt')
-
-    # nelson_ACTH = np.genfromtxt(FILENAME_ACTH)
-    # nelson_CORT = np.genfromtxt(FILENAME_CORT)
-    # # Join the data columns and create a tensor with them
-    # true_y = torch.from_numpy(
-    #     np.concatenate((nelson_ACTH, nelson_CORT), 1)[:,[1,3]]
-    # )
     dataset = NelsonData(
         '/Users/christopher/Documents/PTSD/NODE Model.nosync/Nelson TSST'
         ' Individual Patient Data', 'Control'
     )
 
-    # loader = DataLoader(
-    #     dataset=dataset, batch_size=len(dataset)-1, shuffle=True
-    # )
-
     # Define the device to use for neural network computations
     device = torch.device('cpu')
 
-    # Create tensor of time steps to match
-    # t_tensor = torch.from_numpy(nelson_ACTH[:,0])
-
-    # Create tensor of initial conditions
-    # y0_tensor = torch.tensor([nelson_ACTH[0,1], nelson_CORT[0,1]])
-
-    # For debugging purposes, pass as argument to ANN init
-    # f = open('testing.txt', 'a+')
-    # Create instance of the neural network class
-    #
     # We need to convert the model parameters to double precision because that
     #  is the format of the datasets and they must match
     func = ANN().double().to(device)
@@ -148,16 +120,16 @@ if __name__ == '__main__':
         )
 
         for data, label in loader:
-            y0_tensor = torch.cat((label[0,0], label[0,1]))
+            y0_tensor = torch.cat((label[0,0,:], label[0,1,:]))
+            print(label)
+            print(y0_tensor)
             # Reset gradient for each training example
             optimizer.zero_grad()
-            print(f"data: {data[:,0]}")
-            print(f"label: {label}")
 
             pred_y = odeint(
                 func,
                 y0_tensor,
-                data[:,0],
+                data[0,:,0],
                 rtol=RTOL,
                 atol=ATOL,
                 method=METHOD,
@@ -193,29 +165,15 @@ if __name__ == '__main__':
     print(f"Runtime: {runtime:.6f} seconds")
 
 
-    torch.save(func.state_dict(), 'NN_state_2HL_40nodes_10control-patients.txt')
-    torch.save(optimizer.state_dict(), 'optimizer_state_Adam_10control-patients.txt')
-    # with torch.no_grad():
-    #     final_y = odeint(
-    #         func, y0_tensor, t_tensor, atol=ATOL, rtol=RTOL, method=METHOD
-    #     )
+    torch.save(
+        func.state_dict(),
+        'NN_state_2HL_40nodes_10control-patients.txt'
+    )
+    torch.save(
+        optimizer.state_dict(),
+        'optimizer_state_Adam_10control-patients.txt'
+    )
 
-    #     fig, (ax1, ax2) = plt.subplots(nrows=2, figsize=(10,10))
-    #     ax1.plot(nelson_ACTH[:,0], nelson_ACTH[:,1], label="Nelson Control")
-    #     ax1.plot(
-    #         t_tensor,
-    #         final_y[:,0],
-    #         label="ANN"
-    #     )
-
-    #     ax2.plot(nelson_CORT[:,0], nelson_CORT[:,1], label="Nelson Control")
-    #     ax2.plot(
-    #         t_tensor,
-    #         final_y[:,1],
-    #         label="ANN"
-    #     )
-    #     plt.show()
-    #     plt.savefig('nelson_control_2HL_40nodes.png')
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 #                                 MIT License                                 #
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
