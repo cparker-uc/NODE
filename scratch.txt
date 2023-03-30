@@ -1,0 +1,17 @@
+So let's start with a single hidden layer with 20 nodes. Do I want to have 3 of these (CRH, ACTH, CORT), or have one network with 3 inputs/outputs?
+
+I suppose I can try both.
+
+3 Networks, 1 input/output each:
+
+Input: y (concentration at current time)
+Output: dy (proper change in concentration for time step taken)
+
+So the torch.Module will be a class that creates all 3 networks in the __init__ method and then iterates them in the forward method.
+What should forward() return? I think it should be a tensor with 3 entries (one for the return of each network)
+
+I'm not sure this makes much sense, a single network with 2 inputs/outputs to match the data seems like it would be faster and produce the same/better
+performance.
+
+Perhaps once we start working on adding in mechanistic characteristics of HPA axis models alongside the NNs, then it might make more sense to have
+multiple networks.
