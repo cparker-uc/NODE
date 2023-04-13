@@ -1,7 +1,7 @@
 # File Name: model.py
 # Author: Christopher Parker
 # Created: Fri Mar 24, 2023 | 10:10P EDT
-# Last Modified: Thu Mar 30, 2023 | 04:16P EDT
+# Last Modified: Wed Apr 12, 2023 | 04:42P EDT
 
 "First pass at an NODE model with PyTorch"
 
@@ -33,11 +33,11 @@ class ANN(nn.Module):
         # Set up neural networks for each element of a 3 equation HPA axis
         #  model
         self.hpa_net = nn.Sequential(
-            nn.Linear(2, 40, bias=True),
+            nn.Linear(2, 11, bias=True),
             nn.ReLU(),
-            nn.Linear(40, 40, bias=True),
+            nn.Linear(11, 11, bias=True),
             nn.ReLU(),
-            nn.Linear(40, 2, bias=True)
+            nn.Linear(11, 2, bias=True)
         )
 
         for m in self.hpa_net.modules():
@@ -71,12 +71,11 @@ class NelsonData(Dataset):
             self.data_dir, f'{self.patient_group}Patient{idx+1}_ACTH.txt'
         )
         CORTdata_path = os.path.join(
-            self.data_dir, f'{self.patient_group}Patient{idx+1}_Cortisol.txt'
+            self.data_dir, f'{self.patient_group}Patient{idx+1}_CORT.txt'
         )
 
         ACTHdata = np.genfromtxt(ACTHdata_path)
         CORTdata = np.genfromtxt(CORTdata_path)
-        print(ACTHdata,CORTdata)
 
         data = torch.from_numpy(
             np.concatenate((ACTHdata, CORTdata), 1)[:,[0,2]]
@@ -84,11 +83,121 @@ class NelsonData(Dataset):
         label = torch.from_numpy(
             np.concatenate((ACTHdata, CORTdata), 1)[:,[1,3]]
         )
-        print(f'label: {label}')
         return data, label
 
+class NelsonGoodData(Dataset):
+    def __init__(self, data_dir, patient_group):
+        self.data_dir = data_dir
+        self.patient_group = patient_group
+
+    def __len__(self):
+        return 11
+
+    def __getitem__(self, idx):
+        """This function will be used by the DataLoader to iterate through the
+        data files of the given patient group and load the data and labels.
+        Due to the nature of the problem, we actually call the time points the
+        data and the concentrations the labels because given the 'data' the
+        ANN should try to match the 'label'. This is slightly different than
+        what would normally be used for training on an image, or something
+        because the data is a time series, as is the label."""
+        match idx:
+            case 0:
+                ACTHdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient2_ACTH.txt'
+                )
+                CORTdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient2_CORT.txt'
+                )
+            case 1:
+                ACTHdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient5_ACTH.txt'
+                )
+                CORTdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient5_CORT.txt'
+                )
+            case 2:
+                ACTHdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient6_ACTH.txt'
+                )
+                CORTdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient6_CORT.txt'
+                )
+            case 3:
+                ACTHdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient7_ACTH.txt'
+                )
+                CORTdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient7_CORT.txt'
+                )
+            case 4:
+                ACTHdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient8_ACTH.txt'
+                )
+                CORTdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient8_CORT.txt'
+                )
+            case 5:
+                ACTHdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient9_ACTH.txt'
+                )
+                CORTdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient9_CORT.txt'
+                )
+            case 6:
+                ACTHdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient10_ACTH.txt'
+                )
+                CORTdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient10_CORT.txt'
+                )
+            case 7:
+                ACTHdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient11_ACTH.txt'
+                )
+                CORTdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient11_CORT.txt'
+                )
+            case 8:
+                ACTHdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient12_ACTH.txt'
+                )
+                CORTdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient12_CORT.txt'
+                )
+            case 9:
+                ACTHdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient13_ACTH.txt'
+                )
+                CORTdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient13_CORT.txt'
+                )
+            case 10:
+                ACTHdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient15_ACTH.txt'
+                )
+                CORTdata_path = os.path.join(
+                    self.data_dir, f'{self.patient_group}Patient15_CORT.txt'
+                )
+
+        ACTHdata = np.genfromtxt(ACTHdata_path)
+        CORTdata = np.genfromtxt(CORTdata_path)
+
+        data = torch.from_numpy(
+            np.concatenate((ACTHdata, CORTdata), 1)[:,[0,2]]
+        )
+        label = torch.from_numpy(
+            np.concatenate((ACTHdata, CORTdata), 1)[:,[1,3]]
+        )
+        return data, label
+
+
 if __name__ == '__main__':
-    dataset = NelsonData(
+    # dataset = NelsonData(
+    #     '/Users/christopher/Documents/PTSD/NODE Model.nosync/Nelson TSST'
+    #     ' Individual Patient Data', 'Control'
+    # )
+    dataset = NelsonGoodData(
         '/Users/christopher/Documents/PTSD/NODE Model.nosync/Nelson TSST'
         ' Individual Patient Data', 'Control'
     )
@@ -110,30 +219,36 @@ if __name__ == '__main__':
     # Initialize tensor to track change in loss over each iteration
     loss_over_time = torch.zeros(ITERS)
 
+    # Each iteration, we choose a different dataset to test instead of
+    #  train
+    loader = DataLoader(
+        dataset=dataset, batch_size=3, shuffle=True
+    )
+
     start_time = time.time()
     # Start main optimization loop
     for itr in range(1, ITERS + 1):
-        # Each iteration, we choose a different dataset to test instead of
-        #  train
-        loader = DataLoader(
-            dataset=dataset, batch_size=3, shuffle=True
-        )
-
         for data, label in loader:
-            y0_tensor = torch.cat((label[0,0,:], label[0,1,:]))
-            print(label)
-            print(y0_tensor)
             # Reset gradient for each training example
             optimizer.zero_grad()
 
-            pred_y = odeint(
-                func,
-                y0_tensor,
-                data[0,:,0],
-                rtol=RTOL,
-                atol=ATOL,
-                method=METHOD,
-            )
+            for i, d in enumerate(label):
+                y0_tensor = d[0,:]
+
+                pred_temp = odeint(
+                    func,
+                    y0_tensor,
+                    data[0,:,0],
+                    rtol=RTOL,
+                    atol=ATOL,
+                    method=METHOD,
+                )
+                if i == 0:
+                    pred_y = pred_temp
+                else:
+                    pred_y = torch.cat(
+                        (pred_y.view(-1,11,2), pred_temp.view(-1,11,2)), 0
+                    ).view(-1,11,2)
 
             # Compute the loss for this iteration
             output = loss(pred_y, label)
@@ -150,7 +265,7 @@ if __name__ == '__main__':
 
             # If this is the first iteration, or a multiple of 100, present the
             #  user with a progress report
-            if (itr == 1) or (itr % 100 == 0):
+            if (itr == 1) or (itr % 10 == 0):
                 print(f"Iter {itr:04d}: loss = {output.item():.6f}")
         except NameError as e:
             print(f'Must not be any batches in the loader. Got error: {e}')
@@ -167,12 +282,12 @@ if __name__ == '__main__':
 
     torch.save(
         func.state_dict(),
-        'NN_state_2HL_40nodes_10control-patients.txt'
+        'NN_state_2HL_11nodes_good-control-patients.txt'
     )
-    torch.save(
-        optimizer.state_dict(),
-        'optimizer_state_Adam_10control-patients.txt'
-    )
+    # torch.save(
+    #     optimizer.state_dict(),
+    #     'optimizer_state_Adam_10control-patients.txt'
+    # )
 
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 #                                 MIT License                                 #
