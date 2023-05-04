@@ -1,7 +1,7 @@
 # File Name: model.py
 # Author: Christopher Parker
 # Created: Fri Mar 24, 2023 | 10:10P EDT
-# Last Modified: Wed Apr 12, 2023 | 04:42P EDT
+# Last Modified: Thu Apr 13, 2023 | 12:34P EDT
 
 "First pass at an NODE model with PyTorch"
 
@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from torchdiffeq import odeint_adjoint as odeint
+from IPython.core.debugger import set_trace
 
 class ANN(nn.Module):
     def __init__(self, file=None):
@@ -191,6 +192,24 @@ class NelsonGoodData(Dataset):
         )
         return data, label
 
+def rms_norm(tensor):
+    # tensor_norms = []
+    # if isinstance(tensor, tuple):
+    #     for tnsr in tensor:
+    #         tensor_norms.append(tnsr.pow(2).mean().sqrt())
+    #     return torch.mean(torch.tensor(tensor_norms))
+    # else:
+    return tensor.pow(2).mean().sqrt()
+
+def make_norm(state):
+    # state_size = state.numel()
+    def norm(aug_state):
+        _, y, adj_y, *_ = aug_state
+        # y = aug_state[1:1 + state_size]
+        # adj_y = aug_state[1 + state_size:1 + 2 * state_size]
+        return max(rms_norm(y), rms_norm(adj_y))
+    return norm
+
 
 if __name__ == '__main__':
     # dataset = NelsonData(
@@ -242,6 +261,7 @@ if __name__ == '__main__':
                     rtol=RTOL,
                     atol=ATOL,
                     method=METHOD,
+                    adjoint_options=dict(norm=make_norm(y0_tensor))
                 )
                 if i == 0:
                     pred_y = pred_temp
@@ -250,6 +270,7 @@ if __name__ == '__main__':
                         (pred_y.view(-1,11,2), pred_temp.view(-1,11,2)), 0
                     ).view(-1,11,2)
 
+            # set_trace()
             # Compute the loss for this iteration
             output = loss(pred_y, label)
 
@@ -282,7 +303,7 @@ if __name__ == '__main__':
 
     torch.save(
         func.state_dict(),
-        'NN_state_2HL_11nodes_good-control-patients.txt'
+        'NN_state_2HL_11nodes_good-control-patients_seminorm.txt'
     )
     # torch.save(
     #     optimizer.state_dict(),

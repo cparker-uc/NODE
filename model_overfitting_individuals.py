@@ -1,11 +1,11 @@
 # File Name: model.py
 # Author: Christopher Parker
 # Created: Fri Mar 24, 2023 | 10:10P EDT
-# Last Modified: Mon Apr 10, 2023 | 08:26P EDT
+# Last Modified: Thu May 04, 2023 | 12:47P EDT
 
 "First pass at an NODE model with PyTorch"
 
-ITERS = 5000
+ITERS = 15000
 LEARNING_RATE = 1e-3
 OPT_RESET = 200
 ATOL = 1e-9
@@ -83,10 +83,10 @@ class NelsonData(Dataset):
         return data, label
 
 if __name__ == '__main__':
-    for i in range(15):
+    for i in (1,6,7):
         dataset = NelsonData(
             '/Users/christopher/Documents/PTSD/NODE Model.nosync/Nelson TSST'
-            ' Individual Patient Data', 'Control'
+            ' Individual Patient Data', 'Atypical'
         )
         # loader = DataLoader(
         #     dataset=dataset, batch_size=3, shuffle=True
@@ -154,7 +154,7 @@ if __name__ == '__main__':
 
         torch.save(
             func.state_dict(),
-            f'NN_state_2HL_11nodes_controlPatient{i}_5kITER_200optreset.txt'
+            f'Refitting/NN_state_2HL_11nodes_atypicalPatient{i}_15kITER_200optreset.txt'
         )
         # torch.save(
         #     optimizer.state_dict(),

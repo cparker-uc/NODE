@@ -1,19 +1,17 @@
 # File Name: model_testing.py
 # Author: Christopher Parker
 # Created: Fri Mar 31, 2023 | 03:09P EDT
-# Last Modified: Wed Apr 12, 2023 | 09:50P EDT
+# Last Modified: Wed May 03, 2023 | 01:46P EDT
 
 """Load saved NN and optimizer states and run network on test data to check the
 results of training"""
 
 import torch
-import torch.nn as nn
-import torch.optim as optim
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 from torchdiffeq import odeint_adjoint as odeint
 from model_overfitting_individuals import ANN
+from model_fitting_virtualpop import NN
 
 
 ITERS = 2000
@@ -63,6 +61,122 @@ def runModel_mean(patient_group, model_state, classifier=''):
 
     plt.savefig(f'Figures/Nelson{patient_group}PatientMean{classifier}.png', dpi=300)
 
+def runModel_ode(model_state, vpop_num=0, classifier=''):
+    func = NN()
+    func.load_state_dict(model_state)
+    func.double().to(device)
+    # data = np.genfromtxt(f'Sriram Model w Random ICs/sriram-model_original_num{vpop_num}.txt')
+    data = np.genfromtxt('sriram-model_original_0-24-24linspace.txt')
+
+    true_y = torch.from_numpy(data[:,1:])
+    y0_tensor = torch.tensor(data[0,1:])
+    t_tensor = torch.from_numpy(data[:,0])
+
+    pred_y = odeint(
+        func, y0_tensor, t_tensor, atol=ATOL, rtol=RTOL, method='dopri5'
+    )
+
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4, figsize=(10,10))
+
+    ax1.plot(t_tensor, true_y[:,0], 'o', label=f'Sriram Model Control Params')
+    ax1.plot(t_tensor, pred_y[:,0], '-', label='Simulated ACTH')
+    ax1.set(
+        title='CRH',
+        xlabel='Time (minutes)',
+        ylabel='CRH Concentration (pg/ml)'
+    )
+    ax1.legend(fancybox=True, shadow=True,loc='upper right')
+
+    ax2.plot(t_tensor, true_y[:,1], 'o', label=f'Sriram Model Control Params')
+    ax2.plot(t_tensor, pred_y[:,1], '-', label='Simulated ACTH')
+    ax2.set(
+        title='ACTH',
+        xlabel='Time (minutes)',
+        ylabel='ACTH Concentration (pg/ml)'
+    )
+    ax2.legend(fancybox=True, shadow=True,loc='upper right')
+
+    ax3.plot(t_tensor, true_y[:,2], 'o', label=f'Sriram Model Control Params')
+    ax3.plot(t_tensor, pred_y[:,2], '-', label='Simulated CORT')
+    ax3.set(
+        title='Cortisol',
+        xlabel='Time (minutes)',
+        ylabel='Cortisol Concentration (micrograms/dL)'
+    )
+    ax3.legend(fancybox=True, shadow=True,loc='upper right')
+
+    ax4.plot(t_tensor, true_y[:,3], 'o', label=f'Sriram Model Control Params')
+    ax4.plot(t_tensor, pred_y[:,3], '-', label='Simulated ACTH')
+    ax4.set(
+        title='GR',
+        xlabel='Time (minutes)',
+        ylabel='GR Concentration (pg/ml)'
+    )
+    ax4.legend(fancybox=True, shadow=True,loc='upper right')
+
+    plt.savefig(f'Figures/sriram-model_control-params_trained-w-randomICs-0-24-1440linspace_num{vpop_num}.png', dpi=300)
+    plt.close(fig)
+
+def runModel_ode_vpop(model_state, classifier=''):
+    func = NN()
+    func.load_state_dict(model_state)
+    func.double().to(device)
+    # data = np.genfromtxt(f'Sriram Model w Random ICs/sriram-model_original_num{vpop_num}.txt')
+    # data = np.genfromtxt('sriram-model_original_0-24-24linspace.txt')
+    vpop_size = 100
+    for  p in range(vpop_size):
+        data = np.genfromtxt(f'Sriram Model w Noise/virtual_pop_normal-dist_sriram-model_vpop{p}.txt')
+        # data_raw = torch.as_tensor(data_raw.reshape(data_raw.shape[0], data_raw.shape[1]//data_raw_size, data_raw_size))
+        t_tensor = torch.linspace(0, 24, 1440)
+        # true_y = data_raw[:,i*4:(i+1)*4]
+        true_y = torch.from_numpy(data)
+
+        y0_tensor = true_y[0,...]
+
+        pred_y = odeint(
+            func, y0_tensor, t_tensor, atol=ATOL, rtol=RTOL, method='dopri5'
+        )
+
+        fig, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4, figsize=(10,10))
+
+        ax1.plot(t_tensor, true_y[:,0], 'o', label=f'Sriram Model Control Params')
+        ax1.plot(t_tensor, pred_y[:,0], '-', label='Simulated ACTH')
+        ax1.set(
+            title='CRH',
+            xlabel='Time (minutes)',
+            ylabel='CRH Concentration (pg/ml)'
+        )
+        ax1.legend(fancybox=True, shadow=True,loc='upper right')
+
+        ax2.plot(t_tensor, true_y[:,1], 'o', label=f'Sriram Model Control Params')
+        ax2.plot(t_tensor, pred_y[:,1], '-', label='Simulated ACTH')
+        ax2.set(
+            title='ACTH',
+            xlabel='Time (minutes)',
+            ylabel='ACTH Concentration (pg/ml)'
+        )
+        ax2.legend(fancybox=True, shadow=True,loc='upper right')
+
+        ax3.plot(t_tensor, true_y[:,2], 'o', label=f'Sriram Model Control Params')
+        ax3.plot(t_tensor, pred_y[:,2], '-', label='Simulated CORT')
+        ax3.set(
+            title='Cortisol',
+            xlabel='Time (minutes)',
+            ylabel='Cortisol Concentration (micrograms/dL)'
+        )
+        ax3.legend(fancybox=True, shadow=True,loc='upper right')
+
+        ax4.plot(t_tensor, true_y[:,3], 'o', label=f'Sriram Model Control Params')
+        ax4.plot(t_tensor, pred_y[:,3], '-', label='Simulated ACTH')
+        ax4.set(
+            title='GR',
+            xlabel='Time (minutes)',
+            ylabel='GR Concentration (pg/ml)'
+        )
+        ax4.legend(fancybox=True, shadow=True,loc='upper right')
+
+        plt.savefig(f'Figures/sriram-model_control-params_trained-w-noise-0-24-1440linspace_num{i}.png', dpi=300)
+        plt.close(fig)
 
 def runModel_group(patient_group, model_state, classifier=''):
     func = ANN()
@@ -147,10 +261,20 @@ def runModel_indiv(patient_group, patient_num, model_state, classifier=''):
     plt.savefig(f'Figures/Nelson{patient_group}Patient{patient_num}{classifier}.png', dpi=300)
 
 if __name__ == "__main__":
-    state = torch.load('NN_state_2HL_11nodes_good-control-patients.txt')
+    # state = torch.load('NN_state_2HL_24nodes_sriram-model_no-noise_0-24-24linspace.txt')
+    state = torch.load("NN_state_2HL_11nodes_100virtual-pop_sriram-model_normal-dist.txt")
     device = torch.device('cpu')
     with torch.no_grad():
-        runModel_mean('Control', state, '_2HL_11nodes_batch-trained')
+        runModel_ode_vpop(state)
+
+    # for i in range(100):
+    #     with torch.no_grad():
+    #         state = torch.load(f'Sriram Model w Random ICs/NN_state_2HL_11nodes_sriram-model_no-noise_num{i}.txt')
+    #         device = torch.device('cpu')
+    #         runModel_ode(state, vpop_num=i)
+
+    # with torch.no_grad():
+    #     runModel_mean('Control', state, '_2HL_11nodes_batch-trained')
     # optimizer = torch.load('optimizer_state_Adam_10control-patients.txt')
     # with torch.no_grad():
     #     runModel_indiv('Control', 1, state, '_2HL_80nodes_trained1indiv_2kITER_200optreset')
