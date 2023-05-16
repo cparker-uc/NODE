@@ -1,7 +1,7 @@
 # File Name: model_testing.py
 # Author: Christopher Parker
 # Created: Fri Mar 31, 2023 | 03:09P EDT
-# Last Modified: Wed May 03, 2023 | 01:46P EDT
+# Last Modified: Fri May 05, 2023 | 01:03P EDT
 
 """Load saved NN and optimizer states and run network on test data to check the
 results of training"""
@@ -220,8 +220,9 @@ def runModel_group(patient_group, model_state, classifier=''):
         plt.show()
         plt.savefig(f'Figures/Nelson{patient_group}Patient{i}{classifier}.png', dpi=300)
 
-def runModel_indiv(patient_group, patient_num, model_state, classifier=''):
-    func = ANN()
+def runModel_indiv(patient_group, patient_num, model_state, input_channels,
+                   hidden_channels, output_channels, classifier=''):
+    func = ANN(input_channels, hidden_channels, output_channels)
     func.load_state_dict(model_state)
     func.double().to(device)
     TEST_ACTH_FILE = f'Nelson TSST Individual Patient Data/{patient_group}Patient{patient_num}_ACTH.txt'
@@ -261,11 +262,11 @@ def runModel_indiv(patient_group, patient_num, model_state, classifier=''):
     plt.savefig(f'Figures/Nelson{patient_group}Patient{patient_num}{classifier}.png', dpi=300)
 
 if __name__ == "__main__":
-    # state = torch.load('NN_state_2HL_24nodes_sriram-model_no-noise_0-24-24linspace.txt')
-    state = torch.load("NN_state_2HL_11nodes_100virtual-pop_sriram-model_normal-dist.txt")
-    device = torch.device('cpu')
-    with torch.no_grad():
-        runModel_ode_vpop(state)
+
+    # state = torch.load("NN_state_2HL_11nodes_100virtual-pop_sriram-model_normal-dist.txt")
+    # device = torch.device('cpu')
+    # with torch.no_grad():
+    #     runModel_ode_vpop(state)
 
     # for i in range(100):
     #     with torch.no_grad():
@@ -273,11 +274,17 @@ if __name__ == "__main__":
     #         device = torch.device('cpu')
     #         runModel_ode(state, vpop_num=i)
 
+    state = torch.load('Refitting/NN_state_2HL_11nodes_atypicalPatient1_15kITER_200optreset.txt')
+    device = torch.device('cpu')
     # with torch.no_grad():
     #     runModel_mean('Control', state, '_2HL_11nodes_batch-trained')
-    # optimizer = torch.load('optimizer_state_Adam_10control-patients.txt')
-    # with torch.no_grad():
-    #     runModel_indiv('Control', 1, state, '_2HL_80nodes_trained1indiv_2kITER_200optreset')
+    with torch.no_grad():
+        runModel_indiv(
+            'Atypical',
+            1, state,
+            2, 11, 2,
+            '_2HL_11nodes_trained1indiv_28kITER_200optreset'
+        )
 
     # for i in range(15):
     #     state = torch.load(f'NN_state_2HL_11nodes_controlPatient{i}_5kITER_200optreset.txt')

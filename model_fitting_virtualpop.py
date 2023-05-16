@@ -1,11 +1,11 @@
 # File Name: model.py
 # Author: Christopher Parker
 # Created: Fri Mar 24, 2023 | 10:10P EDT
-# Last Modified: Wed May 03, 2023 | 01:43P EDT
+# Last Modified: Fri May 05, 2023 | 01:45P EDT
 
 "First pass at an NODE model with PyTorch"
 
-ITERS = 100
+ITERS = 50
 LEARNING_RATE = 1e-3
 OPT_RESET = 200
 ATOL = 1e-9
