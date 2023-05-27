@@ -1,17 +1,17 @@
 # File Name: model.py
 # Author: Christopher Parker
 # Created: Fri Mar 24, 2023 | 10:10P EDT
-# Last Modified: Tue May 16, 2023 | 10:01P EDT
+# Last Modified: Fri May 26, 2023 | 10:21P EDT
 
 "First pass at an NODE model with PyTorch"
 
-ITERS = 15000
+ITERS = 2000
 LEARNING_RATE = 1e-3
-OPT_RESET = 200
+OPT_RESET = 500
 ATOL = 1e-9
 RTOL = 1e-7
 METHOD = 'dopri5'
-PATIENT_GROUP = 'Neither'
+PATIENT_GROUP = 'Atypical'
 
 import os
 import time
@@ -35,6 +35,24 @@ class ANN(nn.Module):
         #  model
         self.hpa_net = nn.Sequential(
             nn.Linear(input_channels, hidden_channels, bias=True),
+            nn.ReLU(),
+            nn.Linear(hidden_channels, hidden_channels, bias=True),
+            nn.ReLU(),
+            nn.Linear(hidden_channels, hidden_channels, bias=True),
+            nn.ReLU(),
+            nn.Linear(hidden_channels, hidden_channels, bias=True),
+            nn.ReLU(),
+            nn.Linear(hidden_channels, hidden_channels, bias=True),
+            nn.ReLU(),
+            nn.Linear(hidden_channels, hidden_channels, bias=True),
+            nn.ReLU(),
+            nn.Linear(hidden_channels, hidden_channels, bias=True),
+            nn.ReLU(),
+            nn.Linear(hidden_channels, hidden_channels, bias=True),
+            nn.ReLU(),
+            nn.Linear(hidden_channels, hidden_channels, bias=True),
+            nn.ReLU(),
+            nn.Linear(hidden_channels, hidden_channels, bias=True),
             nn.ReLU(),
             nn.Linear(hidden_channels, hidden_channels, bias=True),
             nn.ReLU(),
@@ -68,28 +86,26 @@ class NelsonData(Dataset):
         ANN should try to match the 'label'. This is slightly different than
         what would normally be used for training on an image, or something
         because the data is a time series, as is the label."""
-        # ACTHdata_path = os.path.join(
-        #     self.data_dir, f'{self.patient_group}Patient{idx+1}_ACTH.txt'
-        # )
+        ACTHdata_path = os.path.join(
+            self.data_dir, f'{self.patient_group}Patient{idx+1}_ACTH.txt'
+        )
         CORTdata_path = os.path.join(
             self.data_dir, f'{self.patient_group}Patient{idx+1}_CORT.txt'
         )
 
-        # ACTHdata = np.genfromtxt(ACTHdata_path)
+        ACTHdata = np.genfromtxt(ACTHdata_path)
         CORTdata = np.genfromtxt(CORTdata_path)
 
-        # data = torch.from_numpy(
-        #     np.concatenate((ACTHdata, CORTdata), 1)[:,[0,2]]
-        # )
-        # label = torch.from_numpy(
-        #     np.concatenate((ACTHdata, CORTdata), 1)[:,[1,3]]
-        # )
-        data = torch.from_numpy(CORTdata)[:,0]
-        label = torch.from_numpy(CORTdata)[:,1].reshape((11,1))
+        data = torch.from_numpy(
+            np.concatenate((ACTHdata, CORTdata), 1)[:,[0,2]]
+        )
+        label = torch.from_numpy(
+            np.concatenate((ACTHdata, CORTdata), 1)[:,[1,3]]
+        )
         return data, label
 
 if __name__ == '__main__':
-    for i in range(15):
+    for i in range(1, 14):
         dataset = NelsonData(
             '/Users/christopher/Documents/PTSD/NODE Model.nosync/Nelson TSST'
             ' Individual Patient Data', PATIENT_GROUP
@@ -104,7 +120,9 @@ if __name__ == '__main__':
 
         # We need to convert the model parameters to double precision because
         #  that is the format of the datasets and they must match
-        func = ANN(1, 11, 1).double().to(device)
+        func = ANN(2, 11, 2).double().to(device)
+        # state = torch.load('Refitting/11HL_11nodes/NN_state_11HL_11nodes_atypicalPatient1_3000ITER_500optreset.txt')
+        # func.load_state_dict(state)
 
         # List of parameters to optimize
         opt_params = list(func.parameters())
@@ -119,22 +137,20 @@ if __name__ == '__main__':
 
         start_time = time.time()
         # Start main optimization loop
-        # for itr in range(1, ITERS + 1):
-        previous_loss = 1
-        itr = 0
-        while previous_loss > 0.5:
-            itr += 1
+        for itr in range(1, ITERS + 1):
+        # previous_loss = 1
+        # itr = 0
+        # while previous_loss > 0.5:
+            # itr += 1
             # Reset gradient for each training example
             optimizer.zero_grad()
 
-            # y0_tensor = label[0,:]
-            y0_tensor = label[0].reshape((1,))
+            y0_tensor = label[0,:]
 
             pred_y = odeint(
                 func,
                 y0_tensor,
-                # data[:,0],
-                data,
+                data[:,0],
                 rtol=RTOL,
                 atol=ATOL,
                 method=METHOD,
@@ -161,37 +177,34 @@ if __name__ == '__main__':
                 print(f"Iter {itr:04d}: loss = {output.item():.6f}")
 
             # If itr is a multiple of OPT_RESET, re-initialize the optimizer to
-            #  reset the learning rate
+            #  reset the learning rate and momentum
             if itr % OPT_RESET == 0:
                 optimizer = optim.Adam(opt_params, lr=LEARNING_RATE)
 
-        runtime = time.time() - start_time
-        print(f"Runtime: {runtime:.6f} seconds")
+            if itr % 1000 == 0:
+                runtime = time.time() - start_time
+                print(f"Runtime: {runtime:.6f} seconds")
+                torch.save(
+                    func.state_dict(),
+                    f'Refitting/NN_state_11HL_11nodes_atypicalPatient{i+1}_'
+                    f'{itr}ITER_{OPT_RESET}optreset.txt'
+                )
+                with open(f'Refitting/NN_state_11HL_11nodes_atypicalPatient{i+1}'
+                          f'_{itr}ITER_{OPT_RESET}optreset_setup.txt',
+                          'w+') as file:
+                    file.write(f'Model Setup for {PATIENT_GROUP} Patient {i+1}:\n')
+                    file.write(
+                        f'ITERS={itr}\nLEARNING_RATE={LEARNING_RATE}\n'
+                        f'OPT_RESET={OPT_RESET}\nATOL={ATOL}\nRTOL={RTOL}\n'
+                        f'METHOD={METHOD}\n'
+                        f'Input channels={func.input_channels}\n'
+                        f'Hidden channels={func.hidden_channels}\n'
+                        f'Output channels={func.output_channels}\n'
+                        f'Runtime={runtime}'
+                        f'Optimizer={optimizer}'
+                        f'Loss over time={loss_over_time}'
+                    )
 
-
-        torch.save(
-            func.state_dict(),
-            f'Refitting/NN_state_2HL_11nodes_atypicalPatient{i}_15kITER_200optreset_CORT-only.txt'
-        )
-
-        with open(f'Refitting/NN_state_2HL_11nodes_atypicalPatient{i}'
-                  '_15kITER_200optreset_setup.txt', 'w+') as file:
-            file.write(f'Model Setup for {PATIENT_GROUP} Patient {i}:\n')
-            file.write(
-                f'ITERS={itr}\nLEARNING_RATE={LEARNING_RATE}\n'
-                f'OPT_RESET={OPT_RESET}\nATOL={ATOL}\nRTOL={RTOL}\n'
-                f'METHOD={METHOD}\n'
-                f'Input channels={func.input_channels}\n'
-                f'Hidden channels={func.hidden_channels}\n'
-                f'Output channels={func.output_channels}\n'
-                f'Optimizer={optimizer}'
-                f'Loss over time={loss_over_time}'
-            )
-
-        # torch.save(
-        #     optimizer.state_dict(),
-        #     f'optimizer_state_Adam_controlPatient{i}.txt'
-        # )
 
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 #                                 MIT License                                 #

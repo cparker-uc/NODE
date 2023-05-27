@@ -1,7 +1,7 @@
 # File Name: model_testing.py
 # Author: Christopher Parker
 # Created: Fri Mar 31, 2023 | 03:09P EDT
-# Last Modified: Fri May 05, 2023 | 01:03P EDT
+# Last Modified: Sat May 27, 2023 | 10:55P EDT
 
 """Load saved NN and optimizer states and run network on test data to check the
 results of training"""
@@ -261,6 +261,38 @@ def runModel_indiv(patient_group, patient_num, model_state, input_channels,
 
     plt.savefig(f'Figures/Nelson{patient_group}Patient{patient_num}{classifier}.png', dpi=300)
 
+def runModel_indiv_1feature(patient_group, feature, patient_num, model_state,
+                   input_channels, hidden_channels, output_channels,
+                   classifier=''):
+    func = ANN(input_channels, hidden_channels, output_channels)
+    func.load_state_dict(model_state)
+    func.double().to(device)
+    TEST_FILE = f'Nelson TSST Individual Patient Data/{patient_group}Patient{patient_num}_{feature}.txt'
+    test_data = np.genfromtxt(TEST_FILE)
+
+    true_y = torch.from_numpy(test_data)[:,1].reshape((-1,1))
+    y0_tensor = true_y[0].reshape((1,))
+    t_tensor = torch.from_numpy(test_data[:,0]).reshape((-1,1))
+    dense_t_tensor = torch.linspace(0, 140, 10000)
+
+    pred_y = odeint(
+        func, y0_tensor, dense_t_tensor, atol=ATOL, rtol=RTOL, method='dopri5'
+    )
+
+    fig, ax = plt.subplots(nrows=1, figsize=(10,10))
+
+    ax.plot(t_tensor, true_y, 'o', label=f'Nelson {patient_group} Patient {patient_num} {feature}')
+    ax.plot(dense_t_tensor, pred_y, '-', label='Simulated {feature}')
+    ax.set(
+        title=f'{feature}',
+        xlabel='Time (minutes)',
+        ylabel=f'{feature} Concentration'
+    )
+    ax.legend(fancybox=True, shadow=True,loc='upper right')
+
+    plt.savefig(f'Figures/Nelson{patient_group}Patient{patient_num}{classifier}_{feature}-only.png', dpi=300)
+    plt.close(fig)
+
 if __name__ == "__main__":
 
     # state = torch.load("NN_state_2HL_11nodes_100virtual-pop_sriram-model_normal-dist.txt")
@@ -274,17 +306,25 @@ if __name__ == "__main__":
     #         device = torch.device('cpu')
     #         runModel_ode(state, vpop_num=i)
 
-    state = torch.load('Refitting/NN_state_2HL_11nodes_atypicalPatient1_15kITER_200optreset.txt')
+    state = torch.load('Refitting/11HL_11nodes/NN_state_11HL_11nodes_atypicalPatient3_2000ITER_500optreset.txt')
     device = torch.device('cpu')
     # with torch.no_grad():
     #     runModel_mean('Control', state, '_2HL_11nodes_batch-trained')
     with torch.no_grad():
         runModel_indiv(
             'Atypical',
-            1, state,
+            3, state,
             2, 11, 2,
-            '_2HL_11nodes_trained1indiv_28kITER_200optreset'
+            '_11HL_11nodes_trained1indiv_2000ITER_500optreset'
         )
+    # with torch.no_grad():
+    #     runModel_indiv_1feature(
+    #         'Atypical',
+    #         'CORT',
+    #         6, state,
+    #         1, 11, 1,
+    #         '_2HL_11nodes_trained1indiv_28kITER_200optreset'
+    #     )
 
     # for i in range(15):
     #     state = torch.load(f'NN_state_2HL_11nodes_controlPatient{i}_5kITER_200optreset.txt')
