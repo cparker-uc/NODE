@@ -5,7 +5,7 @@
 
 "First pass at an NODE model with PyTorch"
 
-ITERS = 2000
+ITERS = 500
 LEARNING_RATE = 1e-3
 OPT_RESET = 500
 ATOL = 1e-9
@@ -105,22 +105,22 @@ class NelsonData(Dataset):
         return data, label
 
 if __name__ == '__main__':
-    for i in range(1, 14):
+    # Define the device to use for neural network computations
+    device = torch.device('cuda')
+    for i in range(14):
         dataset = NelsonData(
-            '/Users/christopher/Documents/PTSD/NODE Model.nosync/Nelson TSST'
-            ' Individual Patient Data', PATIENT_GROUP
+            'Nelson TSST Individual Patient Data', PATIENT_GROUP
         )
         # loader = DataLoader(
         #     dataset=dataset, batch_size=3, shuffle=True
         # )
-        data, label = dataset[i]
 
-        # Define the device to use for neural network computations
-        device = torch.device('cpu')
+        data, label = dataset[i]
+        data, label = data.to(device), label.to(device)
 
         # We need to convert the model parameters to double precision because
         #  that is the format of the datasets and they must match
-        func = ANN(2, 11, 2).double().to(device)
+        func = ANN(2, 40, 2).double().to(device)
         # state = torch.load('Refitting/11HL_11nodes/NN_state_11HL_11nodes_atypicalPatient1_3000ITER_500optreset.txt')
         # func.load_state_dict(state)
 
@@ -181,7 +181,7 @@ if __name__ == '__main__':
             if itr % OPT_RESET == 0:
                 optimizer = optim.Adam(opt_params, lr=LEARNING_RATE)
 
-            if itr % 1000 == 0:
+            if itr % 100 == 0:
                 runtime = time.time() - start_time
                 print(f"Runtime: {runtime:.6f} seconds")
                 torch.save(
