@@ -1,11 +1,11 @@
 # File Name: model.py
 # Author: Christopher Parker
 # Created: Fri Mar 24, 2023 | 10:10P EDT
-# Last Modified: Fri May 26, 2023 | 10:21P EDT
+# Last Modified: Tue May 30, 2023 | 03:37P EDT
 
 "First pass at an NODE model with PyTorch"
 
-ITERS = 2000
+ITERS = 5000
 LEARNING_RATE = 1e-3
 OPT_RESET = 500
 ATOL = 1e-9
@@ -35,24 +35,6 @@ class ANN(nn.Module):
         #  model
         self.hpa_net = nn.Sequential(
             nn.Linear(input_channels, hidden_channels, bias=True),
-            nn.ReLU(),
-            nn.Linear(hidden_channels, hidden_channels, bias=True),
-            nn.ReLU(),
-            nn.Linear(hidden_channels, hidden_channels, bias=True),
-            nn.ReLU(),
-            nn.Linear(hidden_channels, hidden_channels, bias=True),
-            nn.ReLU(),
-            nn.Linear(hidden_channels, hidden_channels, bias=True),
-            nn.ReLU(),
-            nn.Linear(hidden_channels, hidden_channels, bias=True),
-            nn.ReLU(),
-            nn.Linear(hidden_channels, hidden_channels, bias=True),
-            nn.ReLU(),
-            nn.Linear(hidden_channels, hidden_channels, bias=True),
-            nn.ReLU(),
-            nn.Linear(hidden_channels, hidden_channels, bias=True),
-            nn.ReLU(),
-            nn.Linear(hidden_channels, hidden_channels, bias=True),
             nn.ReLU(),
             nn.Linear(hidden_channels, hidden_channels, bias=True),
             nn.ReLU(),
@@ -105,7 +87,7 @@ class NelsonData(Dataset):
         return data, label
 
 if __name__ == '__main__':
-    for i in range(1, 14):
+    for i in range(14):
         dataset = NelsonData(
             '/Users/christopher/Documents/PTSD/NODE Model.nosync/Nelson TSST'
             ' Individual Patient Data', PATIENT_GROUP
@@ -128,7 +110,7 @@ if __name__ == '__main__':
         opt_params = list(func.parameters())
 
         # Initialize the optimizer and the loss function
-        optimizer = optim.Adam(opt_params, lr=LEARNING_RATE)
+        optimizer = optim.Adagrad(opt_params, lr=LEARNING_RATE)
         loss = nn.MSELoss()
 
         # Initialize tensor to track change in loss over each iteration
@@ -186,10 +168,10 @@ if __name__ == '__main__':
                 print(f"Runtime: {runtime:.6f} seconds")
                 torch.save(
                     func.state_dict(),
-                    f'Refitting/NN_state_11HL_11nodes_atypicalPatient{i+1}_'
+                    f'Refitting/NN_state_2HL_11nodes_Adagrad_atypicalPatient{i+1}_'
                     f'{itr}ITER_{OPT_RESET}optreset.txt'
                 )
-                with open(f'Refitting/NN_state_11HL_11nodes_atypicalPatient{i+1}'
+                with open(f'Refitting/NN_state_2HL_11nodes_Adagrad_atypicalPatient{i+1}'
                           f'_{itr}ITER_{OPT_RESET}optreset_setup.txt',
                           'w+') as file:
                     file.write(f'Model Setup for {PATIENT_GROUP} Patient {i+1}:\n')
@@ -200,7 +182,7 @@ if __name__ == '__main__':
                         f'Input channels={func.input_channels}\n'
                         f'Hidden channels={func.hidden_channels}\n'
                         f'Output channels={func.output_channels}\n'
-                        f'Runtime={runtime}'
+                        f'Runtime={runtime}\n'
                         f'Optimizer={optimizer}'
                         f'Loss over time={loss_over_time}'
                     )

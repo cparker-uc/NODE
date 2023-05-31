@@ -1,7 +1,7 @@
 # File Name: model_testing.py
 # Author: Christopher Parker
 # Created: Fri Mar 31, 2023 | 03:09P EDT
-# Last Modified: Sat May 27, 2023 | 10:55P EDT
+# Last Modified: Tue May 30, 2023 | 11:42P EDT
 
 """Load saved NN and optimizer states and run network on test data to check the
 results of training"""
@@ -239,7 +239,7 @@ def runModel_indiv(patient_group, patient_num, model_state, input_channels,
         func, y0_tensor, dense_t_tensor, atol=ATOL, rtol=RTOL, method='dopri5'
     )
 
-    _, (ax1, ax2) = plt.subplots(nrows=2, figsize=(10,10))
+    fig, (ax1, ax2) = plt.subplots(nrows=2, figsize=(10,10))
 
     ax1.plot(t_tensor, true_y[:,0], 'o', label=f'Nelson {patient_group} Patient {patient_num} ACTH')
     ax1.plot(dense_t_tensor, pred_y[:,0], '-', label='Simulated ACTH')
@@ -260,6 +260,7 @@ def runModel_indiv(patient_group, patient_num, model_state, input_channels,
     ax2.legend(fancybox=True, shadow=True,loc='upper right')
 
     plt.savefig(f'Figures/Nelson{patient_group}Patient{patient_num}{classifier}.png', dpi=300)
+    plt.close(fig)
 
 def runModel_indiv_1feature(patient_group, feature, patient_num, model_state,
                    input_channels, hidden_channels, output_channels,
@@ -306,17 +307,18 @@ if __name__ == "__main__":
     #         device = torch.device('cpu')
     #         runModel_ode(state, vpop_num=i)
 
-    state = torch.load('Refitting/11HL_11nodes/NN_state_11HL_11nodes_atypicalPatient3_2000ITER_500optreset.txt')
+    # state = torch.load('Refitting/2HL_11nodes_sigmoid/NN_state_2HL_11nodes_sigmoid_atypicalPatient2_3000ITER_500optreset.txt', map_location=torch.device('cpu'))
     device = torch.device('cpu')
     # with torch.no_grad():
     #     runModel_mean('Control', state, '_2HL_11nodes_batch-trained')
-    with torch.no_grad():
-        runModel_indiv(
-            'Atypical',
-            3, state,
-            2, 11, 2,
-            '_11HL_11nodes_trained1indiv_2000ITER_500optreset'
-        )
+    # with torch.no_grad():
+    #     runModel_indiv(
+    #         'Atypical',
+    #         2, state,
+    #         2, 11, 2,
+    #         '_2HL_11nodes_sigmoid_trained1indiv_3000ITER_500optreset'
+    #     )
+
     # with torch.no_grad():
     #     runModel_indiv_1feature(
     #         'Atypical',
@@ -326,10 +328,14 @@ if __name__ == "__main__":
     #         '_2HL_11nodes_trained1indiv_28kITER_200optreset'
     #     )
 
-    # for i in range(15):
-    #     state = torch.load(f'NN_state_2HL_11nodes_controlPatient{i}_5kITER_200optreset.txt')
-    #     with torch.no_grad():
-    #         runModel_indiv('Control', i+1, state, '_2HL_11nodes_5kITER_200optreset_trained1indiv_smooth')
+    for i in range(14):
+        for j in range(5):
+            state = torch.load(f'Refitting/2HL_11nodes_Adagrad/NN_state_2HL_11nodes_Adagrad_atypicalPatient{i+1}_{j+1}000ITER_500optreset.txt', map_location=torch.device('cpu'))
+            with torch.no_grad():
+                runModel_indiv(
+                    'Atypical', i+1, state, 2, 11, 2,
+                    f'_2HL_11nodes_Adagrad_trained1indiv_{j+1}000ITER_500optreset'
+                )
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 #                                 MIT License                                 #
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
