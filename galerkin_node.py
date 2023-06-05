@@ -1,7 +1,7 @@
 # File Name: galerkin_node.py
 # Author: Christopher Parker
 # Created: Tue May 30, 2023 | 03:04P EDT
-# Last Modified: Mon Jun 05, 2023 | 06:39P EDT
+# Last Modified: Mon Jun 05, 2023 | 06:59P EDT
 
 """Implementing the torchdyn library Galerkin NODE class to allow
 depth-variance among the neural network parameters"""
@@ -18,7 +18,7 @@ ATOL = 1e-5
 RTOL = 1e-5
 METHOD = 'dopri5'
 
-PATIENT_GROUP = 'Neither'
+PATIENT_GROUP = 'Control'
 
 # from IPython.core.debugger import set_trace
 import os
@@ -288,30 +288,31 @@ def NCDE_main():
 
     dataset = NelsonData('Nelson TSST Individual Patient Data', PATIENT_GROUP)
     dataloader = DataLoader(dataset=dataset, batch_size=3, shuffle=True)
-    for i in range(14):
-        data, label = dataset[i]
-        label = label.reshape(1,11,2)
-        # t_eval = data[:,0]  # Time points we need the solver to output
-        # y0 = label[0,:]     # ICs for the vector field
+    t_eval = dataset[0][0][:,0]  # Time points we need the solver to output
 
-        model = NeuralCDE(2, 2, 2, t_interval=data[:,0]).double()
-        coeffs = torchcde.hermite_cubic_coefficients_with_backward_differences(label, t=data[:,0])
+    model = NeuralCDE(2, 2, 2, t_interval=t_eval).double()
+    optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=DECAY)
+    # optimizer = optim.Adam(model.parameters(), lr=LR)
 
-        # optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=DECAY)
-        optimizer = optim.Adam(model.parameters(), lr=LR)
-        loss = nn.MSELoss()
-        loss_over_time = []
+    loss = nn.MSELoss()
+    loss_over_time = []
 
-        start_time = time.time()
-        for itr in range(1, ITERS+1):
+    start_time = time.time()
+    for itr in range(1, ITERS+1):
+        for j, (_, labels) in enumerate(dataloader):
+            # labels = labels.reshape(-1,11,2)
+            # y0 = label[0,:]     # ICs for the vector field
+
+            coeffs = torchcde.hermite_cubic_coefficients_with_backward_differences(labels, t=t_eval)
+
             optimizer.zero_grad()
 
             # Compute the forward direction of the NODE
             pred_y = model(coeffs)
 
             # Compute the loss based on the results
-            output = loss(pred_y, label)
-            loss_over_time.append(output.item())
+            output = loss(pred_y, labels)
+            loss_over_time.append((j, output.item()))
 
             # Backpropagate through the adjoint of the NODE to compute gradients
             #  WRT each parameter
@@ -324,40 +325,40 @@ def NCDE_main():
             # If this is the first iteration, or a multiple of 100, present the
             #  user with a progress report
             if (itr == 1) or (itr % 10 == 0):
-                print(f"Iter {itr:04d}: loss = {output.item():.6f}")
+                print(f"Iter {itr:04d} Batch {j}: loss = {output.item():.6f}")
 
-            # If itr is a multiple of OPT_RESET, re-initialize the optimizer to
-            #  reset the learning rate and momentum
-            if OPT_RESET is None:
-                pass
-            elif itr % OPT_RESET == 0:
-                optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=DECAY)
+        # If itr is a multiple of OPT_RESET, re-initialize the optimizer to
+        #  reset the learning rate and momentum
+        if OPT_RESET is None:
+            pass
+        elif itr % OPT_RESET == 0:
+            optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=DECAY)
 
-            if itr % 1000 == 0:
-                runtime = time.time() - start_time
-                print(f"Runtime: {runtime:.6f} seconds")
-                torch.save(
-                    model.state_dict(),
-                    # f'Refitting/NN_state_2HL_32nodes_Galerkin_AdamW_Tanh_atypicalPatient{i+1}_'
-                    f'Refitting/NN_state_2HL_128nodes_NCDE_{PATIENT_GROUP}{i+1}_'
-                    f'{itr}ITER_normed.txt'
+        if itr % 1000 == 0:
+            runtime = time.time() - start_time
+            print(f"Runtime: {runtime:.6f} seconds")
+            torch.save(
+                model.state_dict(),
+                # f'Refitting/NN_state_2HL_128nodes_NCDE_{PATIENT_GROUP}{i+1}_'
+                f'Refitting/NN_state_2HL_128nodes_NCDE_{PATIENT_GROUP}_batchsize3_'
+                f'{itr}ITER_normed.txt'
+            )
+            # with open(f'Refitting/NN_state_2HL_128nodes_NCDE_{PATIENT_GROUP}{i+1}'
+            with open(f'Refitting/NN_state_2HL_128nodes_NCDE_{PATIENT_GROUP}_batchsize3'
+                      f'_{itr}ITER_normed_setup.txt',
+                      'w+') as file:
+                file.write(f'Model Setup for {PATIENT_GROUP} Patient {i+1}:\n')
+                file.write(
+                    f'ITERS={itr}\nLEARNING_RATE={LR}\n'
+                    f'OPT_RESET={OPT_RESET}\nATOL={ATOL}\nRTOL={RTOL}\n'
+                    f'METHOD={METHOD}\n'
+                    f'Input channels={INPUT_CHANNELS}\n'
+                    f'Hidden channels={HDIM}\n'
+                    f'Output channels={OUTPUT_CHANNELS}\n'
+                    f'Runtime={runtime}\n'
+                    f'Optimizer={optimizer}'
+                    f'Loss over time={loss_over_time}'
                 )
-                # with open(f'Refitting/NN_state_2HL_32nodes_Galerkin_AdamW_Tanh_atypicalPatient{i+1}'
-                with open(f'Refitting/NN_state_2HL_128nodes_NCDE_{PATIENT_GROUP}{i+1}'
-                          f'_{itr}ITER_normed_setup.txt',
-                          'w+') as file:
-                    file.write(f'Model Setup for {PATIENT_GROUP} Patient {i+1}:\n')
-                    file.write(
-                        f'ITERS={itr}\nLEARNING_RATE={LR}\n'
-                        f'OPT_RESET={OPT_RESET}\nATOL={ATOL}\nRTOL={RTOL}\n'
-                        f'METHOD={METHOD}\n'
-                        f'Input channels={INPUT_CHANNELS}\n'
-                        f'Hidden channels={HDIM}\n'
-                        f'Output channels={OUTPUT_CHANNELS}\n'
-                        f'Runtime={runtime}\n'
-                        f'Optimizer={optimizer}'
-                        f'Loss over time={loss_over_time}'
-                    )
 
 
 if __name__ == "__main__":
