@@ -1,17 +1,23 @@
 # File Name: model_testing.py
 # Author: Christopher Parker
 # Created: Fri Mar 31, 2023 | 03:09P EDT
-# Last Modified: Tue May 30, 2023 | 11:42P EDT
+# Last Modified: Mon Jun 05, 2023 | 05:12P EDT
 
 """Load saved NN and optimizer states and run network on test data to check the
 results of training"""
 
 import torch
+import torchcde
+import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
 from torchdiffeq import odeint_adjoint as odeint
 from model_overfitting_individuals import ANN
 from model_fitting_virtualpop import NN
+from galerkin_node import NDEOutputLayer, CDEFunc, NeuralCDE
+from torchdyn.core import NeuralODE
+from torchdyn.nn.galerkin import Chebychev, GalLinear, Fourier
+from torchdyn.nn.node_layers import DepthCat
 
 
 ITERS = 2000
@@ -294,6 +300,193 @@ def runModel_indiv_1feature(patient_group, feature, patient_num, model_state,
     plt.savefig(f'Figures/Nelson{patient_group}Patient{patient_num}{classifier}_{feature}-only.png', dpi=300)
     plt.close(fig)
 
+def runModel_indiv_torchdyn_normed(patient_group, patient_num, model_state, input_channels,
+                   hidden_channels, output_channels, classifier=''):
+
+    TEST_ACTH_FILE = f'Nelson TSST Individual Patient Data/{patient_group}Patient{patient_num}_ACTH.txt'
+    TEST_CORT_FILE = f'Nelson TSST Individual Patient Data/{patient_group}Patient{patient_num}_CORT.txt'
+    ACTH_data = np.genfromtxt(TEST_ACTH_FILE)
+    ACTH_mean = np.mean(ACTH_data[:,1])
+    ACTH_norm = ACTH_data[:,1]/ACTH_mean
+    CORT_data = np.genfromtxt(TEST_CORT_FILE)
+    CORT_mean = np.mean(CORT_data[:,1])
+    CORT_norm = CORT_data[:,1]/CORT_mean
+
+    true_y = torch.from_numpy(np.concatenate((ACTH_norm.reshape(-1,1), CORT_norm.reshape(-1,1)), 1))
+    y0_tensor = torch.tensor((ACTH_norm[0], CORT_norm[0]))
+    t_tensor = torch.from_numpy(ACTH_data[:,0])
+    dense_t_tensor = torch.linspace(0, 140, 10000)
+
+    f = nn.Sequential(
+        nn.Linear(input_channels, hidden_channels),
+        nn.ReLU(),
+        # DepthCat(1),
+        # GalLinear(hidden_channels, hidden_channels, expfunc=Chebychev(15)),
+        # nn.Tanh(),
+        nn.Linear(hidden_channels, hidden_channels),
+        nn.ReLU(),
+        nn.Linear(hidden_channels, 2)
+    ).double()
+
+    # Initialize parameters of the last linear layer to zero
+    for p in f[-1].parameters():
+        torch.nn.init.zeros_(p)
+
+    # We pass the vector field f, the time steps at which we want evaluations
+    #  and kwargs for the diff eq solver options
+    nde = NeuralODE(
+        f, dense_t_tensor, sensitivity='adjoint', solver=METHOD,
+        atol=ATOL, rtol=RTOL
+    ).to(device)
+
+    # This layer does not compute anything, it simply re-orders the dimensions
+    #  of the NeuralODE output to match the NelsonData format
+    out_layer = NDEOutputLayer()
+
+    func = nn.Sequential(nde, out_layer).to(device)
+    func.load_state_dict(model_state)
+    func.double().to(device)
+
+    pred_y = func(y0_tensor)
+    fig, (ax1, ax2) = plt.subplots(nrows=2, figsize=(10,10))
+
+    ax1.plot(t_tensor, true_y[:,0], 'o', label=f'Nelson {patient_group} Patient {patient_num} ACTH')
+    ax1.plot(dense_t_tensor, pred_y[:,0], '-', label='Simulated ACTH')
+    ax1.set(
+        title='ACTH',
+        xlabel='Time (minutes)',
+        ylabel='ACTH Concentration (pg/ml)'
+    )
+    ax1.legend(fancybox=True, shadow=True,loc='upper right')
+
+    ax2.plot(t_tensor, true_y[:,1], 'o', label=f'Nelson {patient_group} Patient {patient_num} CORT')
+    ax2.plot(dense_t_tensor, pred_y[:,1], '-', label='Simulated CORT')
+    ax2.set(
+        title='Cortisol',
+        xlabel='Time (minutes)',
+        ylabel='Cortisol Concentration (micrograms/dL)'
+    )
+    ax2.legend(fancybox=True, shadow=True,loc='upper right')
+
+    plt.savefig(f'Figures/Nelson{patient_group}Patient{patient_num}{classifier}.png', dpi=300)
+    plt.close(fig)
+
+def runModel_indiv_torchdyn(patient_group, patient_num, model_state, input_channels,
+                   hidden_channels, output_channels, classifier=''):
+
+    TEST_ACTH_FILE = f'Nelson TSST Individual Patient Data/{patient_group}Patient{patient_num}_ACTH.txt'
+    TEST_CORT_FILE = f'Nelson TSST Individual Patient Data/{patient_group}Patient{patient_num}_CORT.txt'
+    ACTH_data = np.genfromtxt(TEST_ACTH_FILE)
+    CORT_data = np.genfromtxt(TEST_CORT_FILE)
+
+    true_y = torch.from_numpy(np.concatenate((ACTH_data, CORT_data), 1))[:,[1,3]]
+    y0_tensor = torch.tensor((ACTH_data[0,1], CORT_data[0,1]))
+    t_tensor = torch.from_numpy(ACTH_data[:,0])
+    dense_t_tensor = torch.linspace(0, 140, 10000)
+
+    f = nn.Sequential(
+        nn.Linear(input_channels, hidden_channels),
+        nn.Tanh(),
+        DepthCat(1),
+        GalLinear(hidden_channels, hidden_channels, Chebychev(15)),
+        nn.Tanh(),
+        nn.Linear(hidden_channels, hidden_channels),
+        nn.Tanh(),
+        nn.Linear(hidden_channels, 2)
+    ).double()
+
+    # Initialize parameters of the last linear layer to zero
+    for p in f[-1].parameters():
+        torch.nn.init.zeros_(p)
+
+    # We pass the vector field f, the time steps at which we want evaluations
+    #  and kwargs for the diff eq solver options
+    nde = NeuralODE(
+        f, dense_t_tensor, sensitivity='adjoint', solver=METHOD,
+        atol=ATOL, rtol=RTOL
+    ).to(device)
+
+    # This layer does not compute anything, it simply re-orders the dimensions
+    #  of the NeuralODE output to match the NelsonData format
+    out_layer = NDEOutputLayer()
+
+    func = nn.Sequential(nde, out_layer).to(device)
+    func.load_state_dict(model_state)
+    func.double().to(device)
+
+    pred_y = func(y0_tensor)
+    fig, (ax1, ax2) = plt.subplots(nrows=2, figsize=(10,10))
+
+    ax1.plot(t_tensor, true_y[:,0], 'o', label=f'Nelson {patient_group} Patient {patient_num} ACTH')
+    ax1.plot(dense_t_tensor, pred_y[:,0], '-', label='Simulated ACTH')
+    ax1.set(
+        title='ACTH',
+        xlabel='Time (minutes)',
+        ylabel='ACTH Concentration (pg/ml)'
+    )
+    ax1.legend(fancybox=True, shadow=True,loc='upper right')
+
+    ax2.plot(t_tensor, true_y[:,1], 'o', label=f'Nelson {patient_group} Patient {patient_num} CORT')
+    ax2.plot(dense_t_tensor, pred_y[:,1], '-', label='Simulated CORT')
+    ax2.set(
+        title='Cortisol',
+        xlabel='Time (minutes)',
+        ylabel='Cortisol Concentration (micrograms/dL)'
+    )
+    ax2.legend(fancybox=True, shadow=True,loc='upper right')
+
+    plt.savefig(f'Figures/Nelson{patient_group}Patient{patient_num}{classifier}.png', dpi=300)
+    plt.close(fig)
+
+def runModel_indiv_NCDE_normed(patient_group, patient_num, model_state, input_channels,
+                   hidden_channels, output_channels, classifier=''):
+
+    TEST_ACTH_FILE = f'Nelson TSST Individual Patient Data/{patient_group}Patient{patient_num}_ACTH.txt'
+    TEST_CORT_FILE = f'Nelson TSST Individual Patient Data/{patient_group}Patient{patient_num}_CORT.txt'
+    ACTH_data = np.genfromtxt(TEST_ACTH_FILE)
+    ACTH_mean = np.mean(ACTH_data[:,1])
+    ACTH_norm = ACTH_data[:,1]/ACTH_mean
+    CORT_data = np.genfromtxt(TEST_CORT_FILE)
+    CORT_mean = np.mean(CORT_data[:,1])
+    CORT_norm = CORT_data[:,1]/CORT_mean
+
+    true_y = torch.from_numpy(np.concatenate((ACTH_norm.reshape(-1,1), CORT_norm.reshape(-1,1)), 1))
+    t_tensor = torch.from_numpy(ACTH_data[:,0])
+    dense_t_tensor = torch.linspace(0, 140, 10000)
+
+    coeffs = torchcde.hermite_cubic_coefficients_with_backward_differences(true_y.reshape(1,11,2), t=t_tensor)
+    path = torchcde.CubicSpline(coeffs, t=t_tensor)
+    path_y = path.evaluate(dense_t_tensor)
+    dense_coeffs = torchcde.hermite_cubic_coefficients_with_backward_differences(path_y, t=dense_t_tensor)
+
+    func = NeuralCDE(input_channels, hidden_channels, output_channels, t_interval=dense_t_tensor).double()
+
+    func.load_state_dict(model_state)
+    func.double().to(device)
+
+    pred_y = func(dense_coeffs)
+    fig, (ax1, ax2) = plt.subplots(nrows=2, figsize=(10,10))
+
+    ax1.plot(t_tensor, true_y[:,0], 'o', label=f'Nelson {patient_group} Patient {patient_num} ACTH')
+    ax1.plot(dense_t_tensor, pred_y[0,:,0], '-', label='Simulated ACTH')
+    ax1.set(
+        title='ACTH',
+        xlabel='Time (minutes)',
+        ylabel='ACTH Concentration (pg/ml)'
+    )
+    ax1.legend(fancybox=True, shadow=True,loc='upper right')
+
+    ax2.plot(t_tensor, true_y[:,1], 'o', label=f'Nelson {patient_group} Patient {patient_num} CORT')
+    ax2.plot(dense_t_tensor, pred_y[0,:,1], '-', label='Simulated CORT')
+    ax2.set(
+        title='Cortisol',
+        xlabel='Time (minutes)',
+        ylabel='Cortisol Concentration (micrograms/dL)'
+    )
+    ax2.legend(fancybox=True, shadow=True,loc='upper right')
+
+    plt.savefig(f'Figures/Nelson{patient_group}Patient{patient_num}{classifier}.png', dpi=300)
+    plt.close(fig)
 if __name__ == "__main__":
 
     # state = torch.load("NN_state_2HL_11nodes_100virtual-pop_sriram-model_normal-dist.txt")
@@ -307,17 +500,19 @@ if __name__ == "__main__":
     #         device = torch.device('cpu')
     #         runModel_ode(state, vpop_num=i)
 
-    # state = torch.load('Refitting/2HL_11nodes_sigmoid/NN_state_2HL_11nodes_sigmoid_atypicalPatient2_3000ITER_500optreset.txt', map_location=torch.device('cpu'))
     device = torch.device('cpu')
     # with torch.no_grad():
     #     runModel_mean('Control', state, '_2HL_11nodes_batch-trained')
-    # with torch.no_grad():
-    #     runModel_indiv(
-    #         'Atypical',
-    #         2, state,
-    #         2, 11, 2,
-    #         '_2HL_11nodes_sigmoid_trained1indiv_3000ITER_500optreset'
-    #     )
+    for i in range(15):
+        for j in range(2):
+            state = torch.load(f'Refitting/NN_state_2HL_128nodes_NCDE_Neither{i+1}_{j+1}000ITER_normed.txt', map_location=device)
+            with torch.no_grad():
+                runModel_indiv_NCDE_normed(
+                    'Neither',
+                    i+1, state,
+                    2, 2, 2,
+                    f'_2HL_128nodes_NCDE_trained1indiv_{j+1}000ITER_normed'
+                )
 
     # with torch.no_grad():
     #     runModel_indiv_1feature(
@@ -328,14 +523,14 @@ if __name__ == "__main__":
     #         '_2HL_11nodes_trained1indiv_28kITER_200optreset'
     #     )
 
-    for i in range(14):
-        for j in range(5):
-            state = torch.load(f'Refitting/2HL_11nodes_Adagrad/NN_state_2HL_11nodes_Adagrad_atypicalPatient{i+1}_{j+1}000ITER_500optreset.txt', map_location=torch.device('cpu'))
-            with torch.no_grad():
-                runModel_indiv(
-                    'Atypical', i+1, state, 2, 11, 2,
-                    f'_2HL_11nodes_Adagrad_trained1indiv_{j+1}000ITER_500optreset'
-                )
+    # for i in range(14):
+    #     for j in range(5):
+    #         state = torch.load(f'Refitting/2HL_11nodes_Adagrad/NN_state_2HL_11nodes_Adagrad_atypicalPatient{i+1}_{j+1}000ITER_500optreset.txt', map_location=torch.device('cpu'))
+    #         with torch.no_grad():
+    #             runModel_indiv(
+    #                 'Atypical', i+1, state, 2, 11, 2,
+    #                 f'_2HL_11nodes_Adagrad_trained1indiv_{j+1}000ITER_500optreset'
+    #             )
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 #                                 MIT License                                 #
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
