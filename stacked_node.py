@@ -1,7 +1,7 @@
 # File Name: stacked_node.py
 # Author: Christopher Parker
 # Created: Tue May 30, 2023 | 03:04P EDT
-# Last Modified: Sun Jun 04, 2023 | 11:43P EDT
+# Last Modified: Tue Jun 06, 2023 | 05:09P EDT
 
 """Implementing the torchdyn library Galerkin NODE class to allow
 depth-variance among the neural network parameters"""
@@ -10,15 +10,16 @@ INPUT_CHANNELS = 2
 HDIM = 32
 OUTPUT_CHANNELS = 2
 
-ITERS = 5000
+ITERS = 1000
 LR = 1e-3
 DECAY = 1e-6
-OPT_RESET = 500
+OPT_RESET = None
 ATOL = 1e-5
 RTOL = 1e-5
 METHOD = 'dopri5'
 
 PATIENT_GROUP = 'Atypical'
+N_CHUNKS = 5
 
 # from IPython.core.debugger import set_trace
 import os
@@ -90,92 +91,104 @@ if __name__ == "__main__":
     for i in range(1):
         dataset = NelsonData('Nelson TSST Individual Patient Data', PATIENT_GROUP)
         data, label = dataset[i]
-        data = data
-        label = label
-        t_eval = data[:,0]  # Time points we need the solver to output
-        y0 = label[0,:]     # ICs for the vector field
+        chunksize = int(np.floor(len(label)/N_CHUNKS))
 
-        f = nn.Sequential(
-            nn.Linear(2, HDIM),
-            nn.Tanh(),
-            nn.Linear(HDIM, HDIM),
-            nn.Tanh(),
-            nn.Linear(HDIM, 2)
-        ).double()
+        # list to store the series of networks being trained
+        models = []
 
-        # Initialize parameters of the last linear layer to zero
-        for p in f[-1].parameters():
-            torch.nn.init.zeros_(p)
+        for j in range(N_CHUNKS):
+            if j == N_CHUNKS-1:
+                datachunk = data[j*chunksize:, :]
+                labelchunk = data[j*chunksize:, :]
+            datachunk = data[j*chunksize:(j+1)*chunksize, :]
+            labelchunk = label[j*chunksize:(j+1)*chunksize, :]
+            t_eval = datachunk[:,0]  # Time points we need the solver to output
+            y0 = labelchunk[0,:]     # ICs for the vector field
 
-        # We pass the vector field f, the time steps at which we want evaluations
-        #  and kwargs for the diff eq solver options
-        nde = NeuralODE(
-            f, t_eval, sensitivity='adjoint', solver=METHOD,
-            atol=ATOL, rtol=RTOL
-        ).double().to(device)
+            f = nn.Sequential(
+                nn.Linear(2, HDIM),
+                nn.Tanh(),
+                nn.Linear(HDIM, HDIM),
+                nn.Tanh(),
+                nn.Linear(HDIM, 2)
+            ).double()
 
-        # This layer does not compute anything, it simply re-orders the dimensions
-        #  of the NeuralODE output to match the NelsonData format
-        out_layer = NDEOutputLayer()
+            # Initialize parameters of the last linear layer to zero
+            for p in f[-1].parameters():
+                torch.nn.init.zeros_(p)
 
-        model = nn.Sequential(nde, out_layer).double().to(device)
+            # We pass the vector field f, the time steps at which we want evaluations
+            #  and kwargs for the diff eq solver options
+            nde = NeuralODE(
+                f, t_eval, sensitivity='adjoint', solver=METHOD,
+                atol=ATOL, rtol=RTOL
+            ).double().to(device)
 
-        optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=DECAY)
-        loss = nn.MSELoss()
-        loss_over_time = []
+            # This layer does not compute anything, it simply re-orders the dimensions
+            #  of the NeuralODE output to match the NelsonData format
+            out_layer = NDEOutputLayer()
 
-        start_time = time.time()
-        for itr in range(1, ITERS+1):
-            optimizer.zero_grad()
+            model = nn.Sequential(nde, out_layer).double().to(device)
+            models.append(model)
 
-            # Compute the forward direction of the NODE
-            pred_y = model(y0)
+            optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=DECAY)
+            loss = nn.MSELoss()
+            loss_over_time = []
 
-            # Compute the loss based on the results
-            output = loss(pred_y, label)
-            loss_over_time.append(output.item())
+            start_time = time.time()
+            for itr in range(1, ITERS+1):
+                optimizer.zero_grad()
 
-            # Backpropagate through the adjoint of the NODE to compute gradients
-            #  WRT each parameter
-            output.backward()
+                # Compute the forward direction of the NODE
+                pred_y = model(y0)
 
-            # Use the gradients calculated through backpropagation to adjust the 
-            #  parameters
-            optimizer.step()
+                # Compute the loss based on the results
+                output = loss(pred_y, labelchunk)
+                loss_over_time.append(output.item())
 
-            # If this is the first iteration, or a multiple of 100, present the
-            #  user with a progress report
-            if (itr == 1) or (itr % 10 == 0):
-                print(f"Iter {itr:04d}: loss = {output.item():.6f}")
+                # Backpropagate through the adjoint of the NODE to compute gradients
+                #  WRT each parameter
+                output.backward()
 
-            # If itr is a multiple of OPT_RESET, re-initialize the optimizer to
-            #  reset the learning rate and momentum
-            if itr % OPT_RESET == 0:
-                optimizer = optim.AdamW(model.parameters(), lr=LR)
+                # Use the gradients calculated through backpropagation to adjust the 
+                #  parameters
+                optimizer.step()
 
-            if itr % 1000 == 0:
-                runtime = time.time() - start_time
-                print(f"Runtime: {runtime:.6f} seconds")
-                torch.save(
-                    model.state_dict(),
-                    f'Refitting/NN_state_2HL_32nodes_Galerkin_AdamW_Tanh_atypicalPatient{i+1}_'
-                    f'{itr}ITER_{OPT_RESET}optreset.txt'
-                )
-                with open(f'Refitting/NN_state_2HL_32nodes_Galerkin_AdamW_Tanh_atypicalPatient{i+1}'
-                          f'_{itr}ITER_{OPT_RESET}optreset_setup.txt',
-                          'w+') as file:
-                    file.write(f'Model Setup for {PATIENT_GROUP} Patient {i+1}:\n')
-                    file.write(
-                        f'ITERS={itr}\nLEARNING_RATE={LR}\n'
-                        f'OPT_RESET={OPT_RESET}\nATOL={ATOL}\nRTOL={RTOL}\n'
-                        f'METHOD={METHOD}\n'
-                        f'Input channels={INPUT_CHANNELS}\n'
-                        f'Hidden channels={HDIM}\n'
-                        f'Output channels={OUTPUT_CHANNELS}\n'
-                        f'Runtime={runtime}\n'
-                        f'Optimizer={optimizer}'
-                        f'Loss over time={loss_over_time}'
+                # If this is the first iteration, or a multiple of 100, present the
+                #  user with a progress report
+                if (itr == 1) or (itr % 10 == 0):
+                    print(f"Iter {itr:04d}: loss = {output.item():.6f}")
+
+                # If itr is a multiple of OPT_RESET, re-initialize the optimizer to
+                #  reset the learning rate and momentum
+                if OPT_RESET is None:
+                    pass
+                elif itr % OPT_RESET == 0:
+                    optimizer = optim.AdamW(model.parameters(), lr=LR)
+
+                if itr % 1000 == 0:
+                    runtime = time.time() - start_time
+                    print(f"Runtime: {runtime:.6f} seconds")
+                    torch.save(
+                        model.state_dict(),
+                        f'Refitting/StackedNODEs/NN_state_2HL_32nodes_stackedNODE{j}_atypicalPatient{i+1}_'
+                        f'{itr}ITER_{OPT_RESET}optreset.txt'
                     )
+                    with open(f'Refitting/StackedNODEs/NN_state_2HL_32nodes_stackedNODE{j}_atypicalPatient{i+1}'
+                              f'_{itr}ITER_{OPT_RESET}optreset_setup.txt',
+                              'w+') as file:
+                        file.write(f'Model Setup for {PATIENT_GROUP} Patient {i+1}:\n')
+                        file.write(
+                            f'ITERS={itr}\nLEARNING_RATE={LR}\n'
+                            f'OPT_RESET={OPT_RESET}\nATOL={ATOL}\nRTOL={RTOL}\n'
+                            f'METHOD={METHOD}\n'
+                            f'Input channels={INPUT_CHANNELS}\n'
+                            f'Hidden channels={HDIM}\n'
+                            f'Output channels={OUTPUT_CHANNELS}\n'
+                            f'Runtime={runtime}\n'
+                            f'Optimizer={optimizer}'
+                            f'Loss over time={loss_over_time}'
+                        )
 
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 #                                 MIT License                                 #

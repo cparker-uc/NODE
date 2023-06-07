@@ -1,7 +1,7 @@
 # File Name: galerkin_node.py
 # Author: Christopher Parker
 # Created: Tue May 30, 2023 | 03:04P EDT
-# Last Modified: Mon Jun 05, 2023 | 06:59P EDT
+# Last Modified: Tue Jun 06, 2023 | 12:27P EDT
 
 """Implementing the torchdyn library Galerkin NODE class to allow
 depth-variance among the neural network parameters"""
@@ -10,6 +10,7 @@ INPUT_CHANNELS = 2
 HDIM = 32
 OUTPUT_CHANNELS = 2
 
+BATCH_SIZE = 3
 ITERS = 2000
 LR = 1e-3
 DECAY = 1e-6
@@ -18,7 +19,7 @@ ATOL = 1e-5
 RTOL = 1e-5
 METHOD = 'dopri5'
 
-PATIENT_GROUP = 'Control'
+PATIENT_GROUP = 'Atypical'
 
 # from IPython.core.debugger import set_trace
 import os
@@ -51,15 +52,17 @@ class CDEFunc(torch.nn.Module):
           self.hidden_channels = hidden_channels
 
           # Define the layers of the NN, with 128 hidden nodes (arbitrary)
-          self.linear1 = torch.nn.Linear(hidden_channels, 128)
-          self.linear2 = torch.nn.Linear(128, hidden_channels*input_channels)
+          self.linear1 = torch.nn.Linear(hidden_channels, 12)
+          self.linear2 = torch.nn.Linear(12, hidden_channels*input_channels)
 
     def forward(self, t, z):
           """t is passed as an argument by the solver, but it is unused in most
           cases"""
           z = self.linear1(z)
+          # print(f'self.linear1.parameters(): {[p for p in self.linear1.parameters()]}')
           z = z.relu()
           z = self.linear2(z)
+          # print(f'self.linear2.parameters(): {[p for p in self.linear2.parameters()]}')
 
           # The first author of the NCDE paper (Kidger) suggests that using tanh
           #  for the final activation leads to better results
@@ -120,7 +123,6 @@ class NeuralCDE(torch.nn.Module):
             func=self.func,
             t=self.t_interval
         )
-        # return z_T
         # cdeint returns the initial value and terminal value from the
         #  integration, we only need the terminal
         # z_T = z_T[:,1]
@@ -287,7 +289,7 @@ def NCDE_main():
     device = torch.device('cpu')
 
     dataset = NelsonData('Nelson TSST Individual Patient Data', PATIENT_GROUP)
-    dataloader = DataLoader(dataset=dataset, batch_size=3, shuffle=True)
+    dataloader = DataLoader(dataset=dataset, batch_size=BATCH_SIZE, shuffle=True)
     t_eval = dataset[0][0][:,0]  # Time points we need the solver to output
 
     model = NeuralCDE(2, 2, 2, t_interval=t_eval).double()
@@ -347,8 +349,9 @@ def NCDE_main():
             with open(f'Refitting/NN_state_2HL_128nodes_NCDE_{PATIENT_GROUP}_batchsize3'
                       f'_{itr}ITER_normed_setup.txt',
                       'w+') as file:
-                file.write(f'Model Setup for {PATIENT_GROUP} Patient {i+1}:\n')
+                file.write(f'Model Setup for {PATIENT_GROUP} Trained Network:\n')
                 file.write(
+                    f'BATCH_SIZE={BATCH_SIZE}'
                     f'ITERS={itr}\nLEARNING_RATE={LR}\n'
                     f'OPT_RESET={OPT_RESET}\nATOL={ATOL}\nRTOL={RTOL}\n'
                     f'METHOD={METHOD}\n'
