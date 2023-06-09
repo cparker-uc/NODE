@@ -1,7 +1,7 @@
 # File Name: mechanistic_node.py
 # Author: Christopher Parker
 # Created: Wed Jun 07, 2023 | 12:13P EDT
-# Last Modified: Wed Jun 07, 2023 | 04:06P EDT
+# Last Modified: Thu Jun 08, 2023 | 07:49P EDT
 
 """This script will train a model consisting of 4 ANNs and 2 mechanistic
 components against individual patients from the Nelson data to see if we can
@@ -14,8 +14,8 @@ ITERS = 5000
 LR = 1e-3
 DECAY = 1e-6
 OPT_RESET = None
-ATOL = 1e-2
-RTOL = 1e-1
+ATOL = 1e-7
+RTOL = 1e-5
 METHOD = 'dopri5'
 PATIENT_GROUP = 'Atypical'
 INPUT_CHANNELS = 2
@@ -43,8 +43,6 @@ class ANN(nn.Module):
         #  model
         self.hpa_net = nn.Sequential(
             nn.Linear(input_channels, hidden_channels, bias=True),
-            nn.ReLU(),
-            nn.Linear(hidden_channels, hidden_channels, bias=True),
             nn.ReLU(),
             nn.Linear(hidden_channels, output_channels, bias=True),
         )
@@ -97,57 +95,87 @@ class NelsonData(Dataset):
         label_norm = torch.cat(((label[:,0]/ACTH_mean).reshape(-1,1), (label[:,1]/CORT_mean).reshape(-1,1)), 1)
         return data, label_norm
 
+class NelsonData(Dataset):
+    def __init__(self, data_dir, patient_group):
+        self.data_dir = data_dir
+        self.patient_group = patient_group
+
+    def __len__(self):
+        return 15
+
+    def __getitem__(self, idx):
+        """This function will be used by the DataLoader to iterate through the
+        data files of the given patient group and load the data and labels.
+        Due to the nature of the problem, we actually call the time points the
+        data and the concentrations the labels because given the 'data' the
+        ANN should try to match the 'label'. This is slightly different than
+        what would normally be used for training on an image, or something
+        because the data is a time series, as is the label."""
+        data_path = os.path.join(
+            self.data_dir, f'sriram-model_original_0-24-240linspace.txt'
+        )
+
+        data = np.genfromtxt(data_path)
+
+        data = torch.from_numpy(
+        )
+        label = torch.from_numpy(
+        )
+        ACTH_mean = torch.mean(label[:,0])
+        label_norm = torch.cat(((label[:,0]/ACTH_mean).reshape(-1,1), (label[:,1]/CORT_mean).reshape(-1,1)), 1)
+        return data, label_norm
+
+
 class NNSystem(nn.Module):
     """Defines the system of equations as a combination of parameters and
     neural networks."""
     def __init__(self):
         super().__init__()
 
-        self.cort_pos = ANN(2, 20, 2).double()
-        self.cort_neg = ANN(2, 20, 2).double()
-        self.acth_pos = ANN(2, 20, 2).double()
-        self.acth_neg = ANN(2, 20, 2).double()
+        self.cort_pos = ANN(1, 9, 1).double()
+        # self.cort_neg = ANN(1, 3, 1).double()
+        self.acth_pos = ANN(1, 9, 1).double()
+        # self.acth_neg = ANN(1, 3, 1).double()
 
-        self.initial = nn.Linear(2, 4).double()
-        self.readout = nn.Linear(4, 2).double()
+        # self.initial = nn.Linear(2, 4).double()
+        # self.readout = nn.Linear(2, 2).double()
 
-        for p in self.initial.parameters():
-            nn.init.normal_(p)
-        for p in self.readout.parameters():
-            nn.init.normal_(p)
+        # for p in self.initial.parameters():
+        #     nn.init.normal_(p)
+        # for p in self.readout.parameters():
+        #     nn.init.normal_(p)
 
         # Define parameters to determine feedback strength
-        self.K_i = torch.nn.Parameter(torch.ones(1)*1.5, requires_grad=False).double()
-        self.n = torch.nn.Parameter(torch.ones(1)*5, requires_grad=False).double()
+        self.K_i = torch.nn.Parameter(torch.ones(1)*1.5, requires_grad=True).double()
+        self.n = torch.nn.Parameter(torch.ones(1)*5, requires_grad=True).double()
         # self.K_i = torch.ones(1)
         # self.n = torch.ones(1)
 
 
     def forward(self, t, y):
         """Defines the RHS of the vector field"""
-        y = self.initial(y).relu().reshape(2,2)
+        # y = self.initial(y).relu().reshape(2,2)
 
-        out = self.readout(
-            torch.cat((
-                (self.K_i**self.n/(self.K_i**self.n + y[1]**(self.n)))*self.acth_pos(t, y[0].reshape(2)) - self.acth_neg(t, y[0].reshape(2)),
-                y[0]*self.cort_pos(t, y[1].reshape(2)) - self.cort_neg(t, y[1].reshape(2))
-            )).relu()
-        )
-        return out
-
-        # return torch.tensor(
-        #     (
-        #         self.acth_pos(t, y[0].reshape(1,1)) - self.acth_neg(t, y[0].reshape(1,1)),
-        #         self.cort_pos(t, y[1].reshape(1,1)) - self.cort_neg(t, y[1].reshape(1,1))
-        #     ), requires_grad=True
+        # out = self.readout(
+            # torch.cat((
+            #     (self.K_i**self.n/(self.K_i**self.n + y[1]**(self.n)))*self.acth_pos(t, y[0].reshape(2)) - self.acth_neg(t, y[0].reshape(2)),
+            #     y[0]*self.cort_pos(t, y[1].reshape(2)) - self.cort_neg(t, y[1].reshape(2))
+            # )).relu()
         # )
-        # print(f'y:{y}, x:{x}')
+        # return out
+        return torch.cat((
+            (self.K_i**self.n/(self.K_i**self.n + y[1]**(self.n)))*self.acth_pos(t, y[0].reshape(1)), #- self.acth_neg(t, y[0].reshape(1)),
+            y[0]*self.cort_pos(t, y[1].reshape(1)) #- self.cort_neg(t, y[1].reshape(1))
+        )).relu()
+
 def main():
     # Define the system of equations
     device = torch.device('cpu')
     model = NNSystem().to(device)
+    # state = torch.load('Refitting/NN_state_1HL_10nodes_mechanisticFeedback_Ki1p5_n5_controlPatient1_5000ITER_Noneoptreset_normed.txt')
+    # model.load_state_dict(state)
     # print([p for p in model.parameters()])
-    optimizer = optim.Adam(model.parameters(), lr=LR)
+    optimizer = optim.Adam(model.parameters(), lr=LR, weight_decay=DECAY)
     loss = nn.MSELoss()
     loss_over_time = []
 
@@ -166,7 +194,6 @@ def main():
             pred_y = odeint(
                 model, y0, t_interval, rtol=RTOL, atol=ATOL, method=METHOD
             )
-            print(pred_y)
 
             # Compute the loss based on the results
             output = loss(pred_y, label)
@@ -197,10 +224,10 @@ def main():
                 print(f"Runtime: {runtime:.6f} seconds")
                 torch.save(
                     model.state_dict(),
-                    f'Refitting/NN_state_2HL_20nodes_mechanisticFeedback_readout_Ki1p5_n5_controlPatient{i+1}_'
+                    f'Refitting/NN_state_1HL_10nodes_mechanisticFeedback_paramOpt_Ki1p5_n5_controlPatient{i+1}_'
                     f'{itr}ITER_{OPT_RESET}optreset_normed.txt'
                 )
-                with open(f'Refitting/NN_state_2HL_20nodes_mechanisticFeedback_readout_Ki1p5_n5_controlPatient{i+1}'
+                with open(f'Refitting/NN_state_1HL_10nodes_mechanisticFeedback_paramOpt_Ki1p5_n5_controlPatient{i+1}'
                           f'_{itr}ITER_{OPT_RESET}optreset_normed_setup.txt',
                           'w+') as file:
                     file.write(f'Model Setup for {PATIENT_GROUP} Patient {i+1}:\n')
@@ -259,9 +286,9 @@ def test(state, patient_group, patient_num, classifier=''):
 if __name__ == "__main__":
     main()
 
-    # state = torch.load('Refitting/NN_state_2HL_20nodes_mechanisticFeedback_readout_Ki1p5_n5_controlPatient1_2000ITER_Noneoptreset_normed.txt')
+    # state = torch.load('Refitting/NN_state_1HL_10nodes_mechanisticFeedback_paramOpt_Ki1p5_n5_controlPatient1_1000ITER_Noneoptreset_normed.txt')
     # with torch.no_grad():
-    #     test(state, 'Control', 1, '_mechanistic_normed_params_2kITER_Ki1p5_n5_initial_readout')
+    #     test(state, 'Control', 1, '_1HL_10nodes_mechanistic_normed_params_noneg_1kITER_Ki1p5_n5')
 
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 #                                 MIT License                                 #
