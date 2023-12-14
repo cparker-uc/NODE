@@ -1,7 +1,7 @@
 # File Name: model_testing.py
 # Author: Christopher Parker
 # Created: Fri Mar 31, 2023 | 03:09P EDT
-# Last Modified: Thu Dec 14, 2023 | 08:35P EST
+# Last Modified: Thu Dec 14, 2023 | 08:50P EST
 
 """Load saved NN and optimizer states and run network on test data to check the
 results of training"""
@@ -627,8 +627,8 @@ if __name__ == "__main__":
     device = torch.device('cpu')
 
     with torch.no_grad():
-        state = torch.load('/Users/christopher/Documents/PTSD/NODE/NODE/NN_state_2HL_11nodes_controlPatient0_5kITER_200optreset.txt')
-        runModel_indiv('Control', 1, state, 2, 11, 2)
+        state = torch.load('/Users/christopher/Documents/PTSD/NODE/NODE/NN_state_2HL_11nodes_controlPatient7_5kITER_200optreset.txt')
+        runModel_indiv('Control', 8, state, 2, 11, 2)
     # with torch.no_grad():
     #     runModel_indiv_stackedNODEs_normed('Control', 1, '3000ITER_500optreset.txt', 3, 2, 11, 2, '_stackedNODEs_3000ITER')
 

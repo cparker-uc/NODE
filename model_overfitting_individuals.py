@@ -11,6 +11,7 @@ OPT_RESET = None
 ATOL = 1e-9
 RTOL = 1e-7
 METHOD = 'rk4'
+N_NETWORKS = 10
 
 from IPython.core.debugger import set_trace
 import os
@@ -86,11 +87,44 @@ class NelsonData(Dataset):
         )
         return data, label
 
-if __name__ == '__main__':
-    for i in range(15):
-        dataset = NelsonData(
-            'Nelson TSST Individual Patient Data', 'Control'
+class AblesonData(Dataset):
+    def __init__(self, data_dir, patient_group):
+        self.data_dir = data_dir
+        self.patient_group = patient_group
+
+    def __len__(self):
+        return 37
+
+    def __getitem__(self, idx):
+        """This function will be used by the DataLoader to iterate through the
+        data files of the given patient group and load the data and labels.
+        Due to the nature of the problem, we actually call the time points the
+        data and the concentrations the labels because given the 'data' the
+        ANN should try to match the 'label'. This is slightly different than
+        what would normally be used for training on an image, or something
+        because the data is a time series, as is the label."""
+        data_path = os.path.join(
+            self.data_dir, f'{self.patient_group}Patient{idx+1}.txt'
         )
+        raw_data = np.genfromtxt(data_path)
+
+        data = torch.from_numpy(
+            raw_data[:,0]
+        )
+        label = torch.from_numpy(
+            raw_data[:,[1,2]]
+        )
+        return data, label
+
+if __name__ == '__main__':
+    for i in range(12,37):
+        dataset = AblesonData(
+            'Ableson TSST Individual Patient Data (Without First 30 Min)',
+            'Control'
+        )
+        # dataset = NelsonData(
+        #     'Nelson TSST Individual Patient Data', 'Control'
+        # )
         # loader = DataLoader(
         #     dataset=dataset, batch_size=3, shuffle=True
         # )
@@ -104,7 +138,7 @@ if __name__ == '__main__':
         # We need to convert the model parameters to double precision because
         #  that is the format of the datasets and they must match
         # func = ANN().double().to(device)
-        funcs = [ANN().double().to(device) for _ in range(100)]
+        funcs = [ANN().double().to(device) for _ in range(N_NETWORKS)]
         func = funcs[0]
 
 
@@ -135,12 +169,12 @@ if __name__ == '__main__':
         # # Also create a tensor to track which of the 5 initial networks performs
         # #  best in the first 10% of training
         # initial_losses = torch.zeros((5, int((ITERS+1)/20)))
-        losses = torch.zeros((100))
+        losses = torch.zeros((N_NETWORKS))
 
         start_time = time.time()
         # Start main optimization loop
         try:
-            for itr in range(1, ITERS):
+            for itr in range(1, ITERS+1):
                 for opt in optimizers:
                     opt.zero_grad()
 
@@ -150,7 +184,7 @@ if __name__ == '__main__':
                     pred_y = odeint(
                         funcs[idx],
                         y0_tensor,
-                        data[:,0],
+                        data,
                         rtol=RTOL,
                         atol=ATOL,
                         method=METHOD,
@@ -174,7 +208,7 @@ if __name__ == '__main__':
 
                     # If we reach a low enough loss, we raise a custom Exception
                     #  which just breaks us out of the double for loop
-                    if losses[idx] < 2:
+                    if losses[idx] < 3:
                         print(f"Good enough")
                         func = model
                         raise Found
@@ -184,6 +218,11 @@ if __name__ == '__main__':
 
                 if itr % 10 == 0:
                     print(f"Iteration {itr}: losses = {losses}")
+                # In case we make it through all 50k iterations without finding
+                #  a good enough network, this will set the saved network to
+                #  the best network we achieved
+                if itr == ITERS:
+                    func = funcs[torch.argmin(losses)]
         except Found:
             pass
         # means = []
@@ -249,7 +288,7 @@ if __name__ == '__main__':
 
         torch.save(
             func.state_dict(),
-            f'NN_state_2HL_11nodes_controlPatient{i}_5kITER_200optreset.txt'
+            f'NN_state_2HL_11nodes_ablesonControlPatient{i}_5kITER_200optreset.txt'
         )
         # torch.save(
         #     optimizer.state_dict(),
