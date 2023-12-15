@@ -1,7 +1,7 @@
 # File Name: model_testing.py
 # Author: Christopher Parker
 # Created: Fri Mar 31, 2023 | 03:09P EDT
-# Last Modified: Thu Dec 14, 2023 | 08:50P EST
+# Last Modified: Fri Dec 15, 2023 | 09:46P EST
 
 """Load saved NN and optimizer states and run network on test data to check the
 results of training"""
@@ -266,7 +266,7 @@ def runModel_indiv(patient_group, patient_num, model_state, input_channels,
     )
     ax2.legend(fancybox=True, shadow=True,loc='upper right')
 
-    plt.savefig(f'Figures/Nelson{patient_group}Patient{patient_num}{classifier}.png', dpi=300)
+    plt.savefig(f'Figures/Ableson{patient_group}Patient{patient_num}{classifier}.png', dpi=300)
     plt.close(fig)
 
 def runModel_indiv_1feature(patient_group, feature, patient_num, model_state,
@@ -627,8 +627,8 @@ if __name__ == "__main__":
     device = torch.device('cpu')
 
     with torch.no_grad():
-        state = torch.load('/Users/christopher/Documents/PTSD/NODE/NODE/NN_state_2HL_11nodes_controlPatient7_5kITER_200optreset.txt')
-        runModel_indiv('Control', 8, state, 2, 11, 2)
+        state = torch.load('/Users/christopher/Documents/PTSD/NODE/NODE/NN_state_2HL_11nodes_controlPatient8_5kITER_200optreset.txt')
+        runModel_indiv('Control', 9, state, 2, 11, 2)
     # with torch.no_grad():
     #     runModel_indiv_stackedNODEs_normed('Control', 1, '3000ITER_500optreset.txt', 3, 2, 11, 2, '_stackedNODEs_3000ITER')
 
@@ -669,14 +669,16 @@ if __name__ == "__main__":
     #         '_2HL_11nodes_trained1indiv_28kITER_200optreset'
     #     )
 
-    # for i in range(14):
-    #     for j in range(5):
-    #         state = torch.load(f'Refitting/2HL_11nodes_Adagrad/NN_state_2HL_11nodes_Adagrad_atypicalPatient{i+1}_{j+1}000ITER_500optreset.txt', map_location=torch.device('cpu'))
-    #         with torch.no_grad():
-    #             runModel_indiv(
-    #                 'Atypical', i+1, state, 2, 11, 2,
-    #                 f'_2HL_11nodes_Adagrad_trained1indiv_{j+1}000ITER_500optreset'
-    #             )
+    for group in ['Control', 'MDD']:
+        # for i in range(15 if group in ['control', 'melancholic'] else 14):
+        for i in range(37 if group == 'Control' else 13):
+            state = torch.load(f'/Users/christopher/Documents/PTSD/NODE/NODE/NN_state_2HL_11nodes_ablesonMDDPatient{i}_5kITER_200optreset.txt')
+
+            with torch.no_grad():
+                runModel_indiv(
+                    group, i+1, state, 2, 11, 2,
+                    f''
+                )
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
 #                                 MIT License                                 #
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#

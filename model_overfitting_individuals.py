@@ -7,11 +7,11 @@
 
 ITERS = 50000
 LEARNING_RATE = 1e-3
-OPT_RESET = None
-ATOL = 1e-9
-RTOL = 1e-7
+OPT_RESET = 500
+ATOL = 1e-6
+RTOL = 1e-4
 METHOD = 'rk4'
-N_NETWORKS = 10
+N_NETWORKS = 100
 
 from IPython.core.debugger import set_trace
 import os
@@ -80,7 +80,7 @@ class NelsonData(Dataset):
         CORTdata = np.genfromtxt(CORTdata_path)
 
         data = torch.from_numpy(
-            np.concatenate((ACTHdata, CORTdata), 1)[:,[0,2]]
+            np.concatenate((ACTHdata, CORTdata), 1)[:,[0]]
         )
         label = torch.from_numpy(
             np.concatenate((ACTHdata, CORTdata), 1)[:,[1,3]]
@@ -117,19 +117,17 @@ class AblesonData(Dataset):
         return data, label
 
 if __name__ == '__main__':
-    for i in range(12,37):
-        dataset = AblesonData(
-            'Ableson TSST Individual Patient Data (Without First 30 Min)',
-            'Control'
-        )
-        # dataset = NelsonData(
-        #     'Nelson TSST Individual Patient Data', 'Control'
-        # )
-        # loader = DataLoader(
-        #     dataset=dataset, batch_size=3, shuffle=True
-        # )
+    # dataset = AblesonData(
+    #     'Ableson TSST Individual Patient Data (Without First 30 Min)',
+    #     'MDD'
+    # )
+    # for i in range(13):
+    dataset = NelsonData(
+        'Nelson TSST Individual Patient Data', 'Atypical'
+    )
+    for i in [1]:
         data, label = dataset[i]
-
+        data = data.view(-1)
         # Define the device to use for neural network computations
         device = torch.device('cpu')
         data = data.double().to(device)
@@ -170,6 +168,7 @@ if __name__ == '__main__':
         # #  best in the first 10% of training
         # initial_losses = torch.zeros((5, int((ITERS+1)/20)))
         losses = torch.zeros((N_NETWORKS))
+        loss_cutoff = 3
 
         start_time = time.time()
         # Start main optimization loop
@@ -196,9 +195,11 @@ if __name__ == '__main__':
                     output = loss(pred_y, label)
 
                     # Backpropagation to calculate the gradient from the loss
-                    output.backward()
-
-                    losses[idx] = output.item()
+                    try:
+                        output.backward()
+                        losses[idx] = output.item()
+                    except RuntimeError as e:
+                        print(f"{e=}")
 
                     # If the loss of any model becomes too large, re-initialize
                     #  the model parameters
@@ -208,7 +209,7 @@ if __name__ == '__main__':
 
                     # If we reach a low enough loss, we raise a custom Exception
                     #  which just breaks us out of the double for loop
-                    if losses[idx] < 3:
+                    if losses[idx] < loss_cutoff:
                         print(f"Good enough")
                         func = model
                         raise Found
@@ -218,6 +219,11 @@ if __name__ == '__main__':
 
                 if itr % 10 == 0:
                     print(f"Iteration {itr}: losses = {losses}")
+
+                # If we have made it 10k iterations without finishing, we
+                #  increase the loss cutoff by 1
+                if itr % 5000 == 0:
+                    loss_cutoff += 3
                 # In case we make it through all 50k iterations without finding
                 #  a good enough network, this will set the saved network to
                 #  the best network we achieved
@@ -225,62 +231,6 @@ if __name__ == '__main__':
                     func = funcs[torch.argmin(losses)]
         except Found:
             pass
-        # means = []
-        # for model_result in initial_losses:
-        #     means.append(torch.mean(model_result))
-        #     loss_over_time[:dist_training_iters] = model_result
-
-        # best_initial_network = torch.argmin(torch.as_tensor(means))
-        # func = funcs[best_initial_network]
-        # optimizer = optimizers[best_initial_network]
-
-
-        # # for itr in range(dist_training_iters, ITERS+1):
-        # for itr in range(1, ITERS+1):
-        #     # Reset gradient for each training example
-        #     optimizer.zero_grad()
-
-        #     y0_tensor = label[0,:]
-
-        #     pred_y = odeint(
-        #         func,
-        #         y0_tensor,
-        #         data[:,0],
-        #         rtol=RTOL,
-        #         atol=ATOL,
-        #         method=METHOD,
-        #         # adjoint_rtol=0.0001,
-        #         # adjoint_atol=0.0001,
-        #     )
-        #     # Compute the loss for this iteration
-        #     output = loss(pred_y, label)
-
-        #     # Backpropagation to calculate the gradient from the loss
-        #     output.backward()
-
-        #     # Step the optimizer with the new gradient
-        #     optimizer.step()
-
-        #     # Save the loss value to the loss_over_time tensor
-        #     loss_over_time[itr-1] = output.item()
-
-            # if itr > 10 and torch.mean(loss_over_time[itr-10:itr+1]) < 3:
-            #     print(f"good enough")
-            #     break
-
-        #     # if itr > 200 and torch.abs(torch.mean(loss_over_time[itr-200:itr+1]) - output.item()) < 0.001:
-        #     #     print(f"no improvement")
-        #     #     optimizer = optim.Adam(opt_params, lr=LEARNING_RATE)
-
-        #     # If this is the first iteration, or a multiple of 100, present the
-        #     #  user with a progress report
-        #     if (itr == 1) or (itr % 10 == 0):
-        #         print(f"Iter {itr:04d}: loss = {output.item():.6f}")
-
-        #     # If itr is a multiple of OPT_RESET, re-initialize the optimizer to
-        #     #  reset the learning rate
-        #     if OPT_RESET and itr % OPT_RESET == 0:
-        #         optimizer = optim.Adam(opt_params, lr=LEARNING_RATE)
 
         runtime = time.time() - start_time
         print(f"Runtime: {runtime:.6f} seconds")
@@ -288,11 +238,11 @@ if __name__ == '__main__':
 
         torch.save(
             func.state_dict(),
-            f'NN_state_2HL_11nodes_ablesonControlPatient{i}_5kITER_200optreset.txt'
+            f'NN_state_2HL_11nodes_atypicalPatient{i}_5kITER_200optreset.txt'
         )
         # torch.save(
-        #     optimizer.state_dict(),
-        #     f'optimizer_state_Adam_controlPatient{i}.txt'
+        #     func.state_dict(),
+        #     f'NN_state_2HL_11nodes_ablesonMDDPatient{i}_5kITER_200optreset.txt'
         # )
 
 #-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#-#
