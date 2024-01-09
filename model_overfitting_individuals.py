@@ -1,31 +1,28 @@
 # File Name: model.py
 # Author: Christopher Parker
 # Created: Fri Mar 24, 2023 | 10:10P EDT
-# Last Modified: Mon Dec 11, 2023 | 11:33P EST
+# Last Modified: Thu Jan 04, 2024 | 01:19P EST
 
 "First pass at an NODE model with PyTorch"
 
 ITERS = 50000
 LEARNING_RATE = 1e-3
-OPT_RESET = 500
 ATOL = 1e-6
 RTOL = 1e-4
 METHOD = 'rk4'
 N_NETWORKS = 100
 
-from IPython.core.debugger import set_trace
 import os
 import time
 import torch
-from copy import copy
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 from torchdiffeq import odeint_adjoint as odeint
 
+# Used for breaking a double for loop when a network reaches the loss
+#  threshold
 class Found(Exception): pass
 
 class ANN(nn.Module):
@@ -123,9 +120,12 @@ if __name__ == '__main__':
     # )
     # for i in range(13):
     dataset = NelsonData(
-        'Nelson TSST Individual Patient Data', 'Atypical'
+        'Nelson TSST Individual Patient Data', 'Control'
     )
-    for i in [1]:
+    for i in range(14):
+        _found_flag = False
+        _increased_flag = False
+
         data, label = dataset[i]
         data = data.view(-1)
         # Define the device to use for neural network computations
@@ -168,7 +168,9 @@ if __name__ == '__main__':
         # #  best in the first 10% of training
         # initial_losses = torch.zeros((5, int((ITERS+1)/20)))
         losses = torch.zeros((N_NETWORKS))
-        loss_cutoff = 3
+        data_means = torch.mean(label, 0)
+        loss_cutoff = torch.sum(data_means*0.05)
+        print(f"{loss_cutoff=}")
 
         start_time = time.time()
         # Start main optimization loop
@@ -222,14 +224,17 @@ if __name__ == '__main__':
 
                 # If we have made it 10k iterations without finishing, we
                 #  increase the loss cutoff by 1
-                if itr % 5000 == 0:
-                    loss_cutoff += 3
+                if itr % 25000 == 0:
+                    loss_cutoff *= 2
+                    _increased_flag = True
+                    print(f"Loss cutoff increased: {loss_cutoff}")
                 # In case we make it through all 50k iterations without finding
                 #  a good enough network, this will set the saved network to
                 #  the best network we achieved
                 if itr == ITERS:
                     func = funcs[torch.argmin(losses)]
         except Found:
+            _found_flag = True
             pass
 
         runtime = time.time() - start_time
@@ -238,7 +243,7 @@ if __name__ == '__main__':
 
         torch.save(
             func.state_dict(),
-            f'NN_state_2HL_11nodes_atypicalPatient{i}_5kITER_200optreset.txt'
+            f'NN_state_2HL_11nodes_controlPatient{i}_5kITER_found{_found_flag}_increased{_increased_flag}.txt'
         )
         # torch.save(
         #     func.state_dict(),

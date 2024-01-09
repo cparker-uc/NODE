@@ -1,7 +1,7 @@
 # File Name: model_testing.py
 # Author: Christopher Parker
 # Created: Fri Mar 31, 2023 | 03:09P EDT
-# Last Modified: Fri Dec 15, 2023 | 09:46P EST
+# Last Modified: Mon Jan 08, 2024 | 10:34P EST
 
 """Load saved NN and optimizer states and run network on test data to check the
 results of training"""
@@ -242,14 +242,19 @@ def runModel_indiv(patient_group, patient_num, model_state, input_channels,
     t_tensor = torch.from_numpy(ACTH_data[:,0])
     dense_t_tensor = torch.linspace(0, 140, 10000)
 
-    pred_y = odeint(
+    dense_pred_y = odeint(
         func, y0_tensor, dense_t_tensor, atol=ATOL, rtol=RTOL, method='dopri5'
     )
+    pred_y = odeint(
+        func, y0_tensor, t_tensor, atol=ATOL, rtol=RTOL, method='dopri5'
+    )
+    loss = torch.nn.functional.mse_loss(pred_y, true_y)
+    print(f'{patient_group} Patient {patient_num}: loss = {loss}')
 
     fig, (ax1, ax2) = plt.subplots(nrows=2, figsize=(10,10))
 
     ax1.plot(t_tensor, true_y[:,0], 'o', label=f'Nelson {patient_group} Patient {patient_num} ACTH')
-    ax1.plot(dense_t_tensor, pred_y[:,0], '-', label='Simulated ACTH')
+    ax1.plot(dense_t_tensor, dense_pred_y[:,0], '-', label='Simulated ACTH')
     ax1.set(
         title='ACTH',
         xlabel='Time (minutes)',
@@ -258,7 +263,7 @@ def runModel_indiv(patient_group, patient_num, model_state, input_channels,
     ax1.legend(fancybox=True, shadow=True,loc='upper right')
 
     ax2.plot(t_tensor, true_y[:,1], 'o', label=f'Nelson {patient_group} Patient {patient_num} CORT')
-    ax2.plot(dense_t_tensor, pred_y[:,1], '-', label='Simulated CORT')
+    ax2.plot(dense_t_tensor, dense_pred_y[:,1], '-', label='Simulated CORT')
     ax2.set(
         title='Cortisol',
         xlabel='Time (minutes)',
@@ -266,7 +271,7 @@ def runModel_indiv(patient_group, patient_num, model_state, input_channels,
     )
     ax2.legend(fancybox=True, shadow=True,loc='upper right')
 
-    plt.savefig(f'Figures/Ableson{patient_group}Patient{patient_num}{classifier}.png', dpi=300)
+    plt.savefig(f'Figures/Nelson{patient_group}Patient{patient_num}{classifier}.png', dpi=300)
     plt.close(fig)
 
 def runModel_indiv_1feature(patient_group, feature, patient_num, model_state,
@@ -626,9 +631,9 @@ def runModel_indiv_stackedNODEs_normed(
 if __name__ == "__main__":
     device = torch.device('cpu')
 
-    with torch.no_grad():
-        state = torch.load('/Users/christopher/Documents/PTSD/NODE/NODE/NN_state_2HL_11nodes_controlPatient8_5kITER_200optreset.txt')
-        runModel_indiv('Control', 9, state, 2, 11, 2)
+    # with torch.no_grad():
+    #     state = torch.load('/Users/christopher/Documents/PTSD/NODE/NODE/NN_state_2HL_11nodes_controlPatient8_5kITER_200optreset.txt')
+    #     runModel_indiv('Control', 9, state, 2, 11, 2)
     # with torch.no_grad():
     #     runModel_indiv_stackedNODEs_normed('Control', 1, '3000ITER_500optreset.txt', 3, 2, 11, 2, '_stackedNODEs_3000ITER')
 
@@ -669,10 +674,10 @@ if __name__ == "__main__":
     #         '_2HL_11nodes_trained1indiv_28kITER_200optreset'
     #     )
 
-    for group in ['Control', 'MDD']:
+    for group in ['Control', 'Atypical']:
         # for i in range(15 if group in ['control', 'melancholic'] else 14):
-        for i in range(37 if group == 'Control' else 13):
-            state = torch.load(f'/Users/christopher/Documents/PTSD/NODE/NODE/NN_state_2HL_11nodes_ablesonMDDPatient{i}_5kITER_200optreset.txt')
+        for i in range(15 if group == 'Control' else 14):
+            state = torch.load(f'/Users/christopher/Documents/PTSD/NCDE Model.nosync/Network States/New Individual Fittings (11 nodes)/{group}Patient{i}.txt')
 
             with torch.no_grad():
                 runModel_indiv(
